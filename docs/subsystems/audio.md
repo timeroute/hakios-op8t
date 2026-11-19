@@ -139,6 +139,43 @@ not silence and how loud. The loader keeps only the first 256 KB and last 1 MB o
 `speaker_probe=3` for early detail. Test programs: `sound_test` (`alert TYPE` for ToneLibrary alerts, `notification
 BUNDLE`), `RC_JOBS=rc.jobs.speakers|alerts|volume`.
 
+## OnePlus 8T (kebab): the audio DSP is up (2026-11-19, RAM only)
++
++**The speakers play now, owner-heard (`sound=4 sound_amps=1 sound_below=96`):** iOS's own
++sound came out of the phone as its desktop appeared (run `logs/154510-run.log` and the next
++one). Both TFA9874s were set up from Android's container `9871N1C` ("speaker" profile: 51
++items of the device's list and 6 of the profile) and reached state 9 (operating); the level is
++set on the samples (the TFA9874 has no volume of its own), the health was looked at every
++200 ms, and both were powered down at the end.
+
+`adsp=1 adsp_loud=1` in run `logs/152625-run.log` brought the DSP up and kept it for the
+run, with no panic:
+
+- its image is whole: 18 segments, 17,540,176 bytes, relocatable (linked at 0x89500000) and
+  put at `0x8fe00000` (kebab's own device tree `pil_adsp_region@8fe00000`, 0x2500000 bytes,
+  the OnePlus 8's; the 8 Pro's is `0x91b00000`);
+- the AOP mailbox was opened and told the image is loaded; RPMh's `lcx.lvl`/`lmx.lvl` 384 was
+  asked for and given back when the DSP asked for its own power; TrustZone accepted this kernel's
+  signature of the image (image 1) and let the DSP out of reset;
+- the DSP said it was up 23.4 ms later, and **GLINK opened `IPCRTR` and `apr_audio_svc` both ways**
+  (the audio services up, 8 QRTR services from the DSP); the shutdown at the end of the run was
+  acknowledged by the DSP and executed by TrustZone.
+
+Firmware: this phone's own `adsp.mdt` and `adsp.b00`–`adsp.b18` from its modem partition's
+`image/` (17 MB, in `fw-audio/`, never in the repository). **The amplifier container
+`tfa98xx.cnt` is still missing**, so `sound=3`/`4` (audible) has not been tried; `sound=1`
+(port) and `sound=2` (a silent tone, amplifiers off) need none.
+
+`sound=2 mic=4` (run `logs/153344-run.log`, RAM only, no panic) verified the rest of the path
+before the amplifiers: the MI2S bit clock (0x104, 3.072 MHz) and frame sync ran at the pins (GPIO
+133 and 135), port `0x1004` (I2S, 2 channels of 24 bits at 48 kHz on data line 1, the SoC the
+master) started, ASM's periods, ADM's device path (COPP 0) and the stream (16-bit linear PCM,
+48 kHz) were routed, and a 1 kHz tone wrote 159 periods with **0 underflows** (48,316 frames a
+second into the DSP; the amplifiers off, so nothing was heard). `mic=4` made `/dev/hk-mic` the
+iOS microphone (it listens only while iOS records). The container was then read from the phone's
+`/vendor` in TWRP (mounted there; Android's shell is denied): `tfa98xx.cnt`, 3,953 bytes, magic
+`PM`, version 3, "stereo", `9871N1C` — the same one Android's log loads.
+
 ## Not done
 
 - USB-C analog headphones: FSA4480 + WCD938x RX + MBHC.

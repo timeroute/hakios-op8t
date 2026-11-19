@@ -97,6 +97,37 @@ lines, joined at the start). `userland/build.sh` puts them in the small image (`
 `network`); the kernel takes the address from `fw/mac` when no `wifi_mac=` is given. Android's own firmware files are
 kept in `fw-wifi/android/`. The extraction commands are in [../devices/instantnoodle.md](../devices/instantnoodle.md).
 
+## OnePlus 8T: QCA6390 on PCIe 0
+
+**Verified in RAM, 2026-11-19:** PCIe trains at 5 GT/s x1, ath11k loads its firmware over MHI and accepts
+the board data as ELF (`logs/115739-run.log`). Scans hear 20–24 APs across 2.4 and 5 GHz. In the next
+run (`logs/133309-run.log.live`, final log with the same stem), the owner joined from Settings and
+confirmed Safari loads a web page. `kebab.conf` now enables `wifi=1` and builds ath11k (`WIFI_ATH11K=1`).
+Run `142437` added an application-level control: Maps loads search results, place data and photos
+over Wi-Fi. Its blank map canvas is the 8T build's Maps/Metal rendering gap, not a network failure
+(`out/maps-wifi-no-tiles.png`). Stock Weather and App Store are not controls here: both hit the
+documented FairPlay path independently of connectivity.
+
+- **Observed/source:** Android's kernel log selects `14wlan.b0c` for this phone's China PVT board.
+  It is a complete ELF (57,844 bytes), **not raw BDF data**; stage it unchanged as `fw-wifi/12wlan.b0c`
+  (the PCIe file alias the kernel currently uses). ath11k detects its ELF header and sends type 1.
+  Use linux-firmware's QCA6390 `amss.bin` and `m3.bin`, plus this phone's own `mac`; vendor files stay outside git.
+- **Source, exercised on phone:** the 8T's DT feeds both aon and dig from `smpa6`. `radio_supplies()` in
+  `instantnoodle_wifi.c` skips `smpf2` on kebab, leaving the 8/8 Pro path unchanged.
+- **Build:** `tools/mk-ath11k.sh` must produce `xnu-deps/build/ath11k/out/ath11k.o` before linking XNU;
+  otherwise the weak `lx_start()` fallback cannot bring the driver up. Built here with 0 driver stubs.
+- **Owner-observed:** Settings shows “Weak Security” and the top Wi-Fi icon is grey, while Safari works.
+  **Observed in `logs/135139-run.log`:** the selected network is WPA2-PSK with CCMP pairwise and **TKIP group**
+  encryption, consistent with the security warning; do not hide that warning in the driver.
+  The grey icon's cause remains unverified (compare compositor issue K46). Do not treat either as
+  evidence of failed connectivity. Sleep/reconnect remains untested.
+- **Grey icon diagnosis, 2026-11-19:** run `140103` proved UIKit is active (`setSignalMode:2`) but
+  receives zero active bars while wifid reports about -57 dBm. Request 106 (`RSSI_BOUNDS`, 16 bytes)
+  was refused. Static reading of this iOS 16.5 wifid shows `Apple80211CopyValue(106)` becomes a
+  dictionary with `RSSI_MIN`, `RSSI_MAX`, `RSSI_THRESHOLD`; the zero legacy threshold is wrong for
+  negative dBm. A kernel fix now reports the signed-byte decoder's -128..127 bounds and threshold
+  -128 (no added admission policy); build/phone verification pending.
+
 ## The station (shared)
 
 Implemented in `wifi/lx/src` (`lx_80211.c`, `lx_wpa.c`, `lx_sae.c`) and tested on the computer by

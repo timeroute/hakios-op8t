@@ -4216,15 +4216,15 @@ camera_thread(__unused void *parameter, __unused wait_result_t result)
 	thread_terminate(current_thread());
 }
 
-extern void instantnoodlep_camera_init(void);   /* bsd/dev/instantnoodle_camera.c: the OnePlus 8 Pro's own */
+extern void instantnoodlep_camera_init(void);   /* bsd/dev/instantnoodle_camera.c: the OnePlus 8 Pro's and 8T's own */
 
 void
 hk_camera_init(void)
 {
 	thread_t thread;
 
-	if (instantnoodlep_board()) {
-		instantnoodlep_camera_init();   /* (this file's driver is the POCO X5 Pro's: other registers, other parts) */
+	if (instantnoodlep_board() || kebab_board()) {
+		instantnoodlep_camera_init();   /* (this file's driver is the POCO X5 Pro's: other registers, other parts; kebab for cam=1 only so far) */
 		return;
 	}
 	if (!PE_parse_boot_argn("cam", &level, sizeof(level)) || level == 0) {
@@ -4260,7 +4260,7 @@ hk_camera_init(void)
 void
 hk_camera_quiesce(void)
 {
-	if (instantnoodlep_board()) {
+	if (instantnoodlep_board() || kebab_board()) {
 		extern void instantnoodlep_camera_quiesce(void);
 
 		instantnoodlep_camera_quiesce();        /* (the OnePlus 8 Pro's frame path: its own driver) */

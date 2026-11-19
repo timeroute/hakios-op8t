@@ -181,11 +181,25 @@ struct apple80211_link_changed {
 	uint8_t unused_3[4];
 };
 
+/*
+ * RSSI_BOUNDS (106): the framework turns these four words into RSSI_MIN,
+ * RSSI_MAX and RSSI_THRESHOLD in the dictionary Apple80211CopyValue returns.
+ * The radio reports IEEE80211_HW_SIGNAL_DBM in a signed byte (lx_80211.c), so
+ * its representable bounds are -128..127 dBm. The admission threshold is the
+ * lower bound: policy belongs to wifid, and a zero here rejects every ordinary
+ * negative-dBm candidate before that policy can run.
+ */
+struct apple80211_rssi_bounds {
+	uint32_t version;
+	int32_t minimum, maximum, threshold;
+};
+
 _Static_assert(sizeof(struct apple80211_assoc) == 592 && offsetof(struct apple80211_assoc, key) == 0x48 &&
     offsetof(struct apple80211_assoc, private_address) == 0x1fc,
     "the association request as iOS 16.5 has it");
 _Static_assert(sizeof(struct apple80211_link_changed) == 32 && offsetof(struct apple80211_link_changed, reason) == 0x14,
     "the link event as iOS 16.5 reads it");
+_Static_assert(sizeof(struct apple80211_rssi_bounds) == 16, "the RSSI bounds iOS 16.5 asks for");
 _Static_assert(sizeof(struct apple80211_channels) == 4824, "the channel list as iOS 16.5 has it");
 _Static_assert(sizeof(struct apple80211_channels_info) == 10016 && offsetof(struct apple80211_channels_info, number) == 0x32e &&
     offsetof(struct apple80211_channels_info, flags) == 0x12d0, "the channels' description as iOS 16.5 has it");
@@ -405,6 +419,13 @@ get(struct apple80211req *request)
 		request->req_val = (int32_t)join_result;
 		lck_mtx_unlock(&apple80211_lock);
 		return 0;
+	case 106: {                             /* signed dBm limits and no extra station-admission floor */
+		const struct apple80211_rssi_bounds answer = {
+			.version = 1, .minimum = -128, .maximum = 127, .threshold = -128
+		};
+
+		return give(request, &answer, sizeof(answer));
+	}
 	case 11: {                              /* what the last scan heard, one access point a request; EIO: that was all */
 		struct hk_sta_bss *bss = kalloc_data(sizeof(*bss), Z_WAITOK);
 		unsigned index;

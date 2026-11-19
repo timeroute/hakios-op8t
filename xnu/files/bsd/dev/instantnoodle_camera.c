@@ -2842,7 +2842,8 @@ camera_thread(__unused void *parameter, __unused wait_result_t result)
 
 	(void)PE_parse_boot_argn("cam_after", &secs, sizeof(secs));
 	IOSleep(secs * 1000);           /* (the system up first) */
-	say("camera: cam=%u: the OnePlus 8 Pro's cameras, %s\n", cam_level, cam_level >= 2 ? "one sensor powered up, its chip ID read" : "a look, reading only");
+	say("camera: cam=%u: %s cameras, %s\n", cam_level, kebab_board() && !instantnoodlep_board() ? "the OnePlus 8T's" : "the OnePlus 8 Pro's",
+	    cam_level >= 2 ? "one sensor powered up, its chip ID read" : "a look, reading only");
 	gcc = (volatile uint32_t *)ml_io_map(GCC_PHYS, GCC_SIZE);
 	show_gcc();
 	show_pins();
@@ -2904,12 +2905,23 @@ instantnoodlep_camera_init(void)
 {
 	uint32_t level = 0;
 	thread_t thread;
+	bool pro = instantnoodlep_board();
+	bool kebab = !pro && kebab_board();
 
-	if (!instantnoodlep_board() || !PE_parse_boot_argn("cam", &level, sizeof(level)) || level == 0) {
+	if ((!pro && !kebab) || !PE_parse_boot_argn("cam", &level, sizeof(level)) || level == 0) {
 		return;
 	}
 	if (level == 5) {
+		if (kebab) {
+			say("camera: cam=5 is the OnePlus 8 Pro's sensors (the 8T's are the IMX586, IMX481, GC5035, GC02M1B and IMX471: its own table is next)\n");
+			return;
+		}
 		fpd_init();                     /* cam=5: the device for iOS (the loader's cam=5 also gives SpringBoard the camera node); no probe */
+		return;
+	}
+	if (kebab && level >= 2) {
+		/* the 8T's sensors are not in this driver yet: its own table (fw-camera/, never in git), the read-only look first */
+		say("camera: cam=%u: the 8T's sensor table is not here yet, cam=1 only (nothing above the look is done)\n", level);
 		return;
 	}
 	cam_level = level == 3 ? 3 : level == 4 ? 4 : (level > 2 ? 2 : level);

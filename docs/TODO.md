@@ -25,7 +25,7 @@ Order inside each section is by priority. Update an item when you change its sta
 | T47 | 8 Pro: Wi-Fi auto-join, sleep, AirDrop, sensors, charging | Open (see section) | P1 |
 | T48 | Apple ID and App Store sign-in do not work properly | In Progress (anisette OTP works off-phone 2026-11-13; owner's priority) | P0 |
 | T49 | Hardware video encoding: the Snapdragon's Venus (H.264/H.265) for VideoToolbox | Not Started | P1 |
-| T50 | OnePlus 8T (kebab): bring the port up on the phone | In Progress (2026-11-19: iOS 16.5 boots to SpringBoard from RAM, touch works (S3908/TCM), Adreno 650 draws with Mesa/freedreno at 50-59 fps, text and keyboard right; peripherals next) | P1 |
+| T50 | OnePlus 8T (kebab): bring the port up on the phone | In Progress (2026-11-19: iOS 16.5 boots to SpringBoard from RAM, touch works (S3908/TCM), Adreno 650 draws with Mesa/freedreno at 50-59 fps, text and keyboard right, flashlight works from Control Center (`torch=3`), Wi-Fi joins in Settings and Safari loads pages (`wifi=1`, owner-confirmed); haptics/audio/camera/modem remain) | P1 |
 | T06 | Cellular modem, telephony, SMS | In progress (image 44, built and RAM-tested, not flashed: **Settings > Cellular, the status bar's LTE and bars, SIM and operator through CoreTelephony** (stand-in for CommCenter, research/modem-sdx55.md); flashed image 43: LTE registration, SIM PIN, **mobile data on en1 (verified)**, SMS send, SMS receive with iOS notifications (verified: banner, lock screen, Messages list and conversation), bars, RTC date; open: tethering, VoLTE/VoWiFi) | P1 |
 | T07 | OnePlus 8 cameras | Partial (back and front stream, autofocus, flash: owner-tested 2026-10-27; 2026-11-07 fixes built, unverified) | P1 |
 | T08 | Headphones / USB-C audio | Not Started | P1 |
@@ -438,12 +438,70 @@ The Python CLI, native loader/kernel mailbox, event logging, userspace bridge, d
   Settings after a visit to Control Center. **Fixed 2026-11-19 (K26): the keyboard running off the right edge** -- iOS
   was told the panel's own 1080 x 2400 (360 x 800 pt, no iPhone's size); it now renders at 1290 x 2796 (430 x 932 pt,
   the 8 Pro's since K43), pushed to the panel with `fb_push=2`, and nothing else regressed (56-59 frames a second).
+- **Flashlight works (2026-11-19, owner-observed):** `torch=3` and Control Center, through `libhakios.media.dylib` and
+  `/dev/hk-torch`, on the PM8150L's module (slave 5, `0xd300`, both channels): `torch=1` read it, `torch=2 torch_secs=30`
+  lit both channels at 125 mA (interrupt `0xd0` ramped up, no fault, stage 0, dark again after 30 s), `torch=3` lit it at
+  850/1000 = 106 mA a channel when tapped and off when tapped again, ending dark (`logs/105758-run.log`,
+  `logs/110348-run.log`). It also found K27: the userland still opened the pre-rename `/dev/hakios-*` names, so the audio,
+  motor, microphone and camera bridges had been opening nothing; the userland now uses the kernel's `/dev/hk-*`.
 - **Loader fix that made the runs measurable:** `xnuloader/loader.c`'s `with_defaults()` cached the merged command line for good, so a
   run silently got the platform's `default_args` and none of its own (`rec_secs`, `touch_lat`, `loader_return_after`); the cache is now
   keyed by the line it was made from.
-- **Still blocked on:** this phone's own `xbl` DXEs (the OnePlus 8 set is a placeholder), and the peripherals one at a time (audio,
-  haptics, torch, Wi-Fi, camera, modem).
-- **Next:** the peripherals one at a time, each after a run that shows it is right: audio, haptics, torch, Wi-Fi, camera, modem. The 8T's
+- **Wi-Fi works (2026-11-19, RAM-only, owner-confirmed):** Settings joins and Safari loads a page in run `133309`.
+  Earlier run `115739` verified PCIe 5 GT/s x1, MHI/QMI, board ELF acceptance and 2.4/5 GHz scans.
+  linux-firmware QCA6390 `amss.bin` + `m3.bin`, this phone's `14wlan.b0c` staged as `12wlan.b0c`, its own `mac`;
+  kebab's dig/aon share `smpa6`, so `instantnoodle_wifi.c` skips `smpf2`. ath11k was built and linked
+  (0 driver stubs). Profile enables `wifi=1` and `WIFI_ATH11K=1`. Grey icon / “Weak Security” reported despite
+  working Safari; cause unverified. Sleep/reconnect untested. See [subsystems/wifi.md](subsystems/wifi.md).
+- **Audio works (2026-11-19, RAM only, owner-heard):** `adsp=1 sound=4 sound_amps=1 sound_below=96`; iOS's
+  own sound came out of the speakers as its desktop appeared. The DSP was first brought up alone (`logs/152625-run.log`:
+  this phone's own 18-segment image in TrustZone, at `0x8fe00000`, the DSP up in 23 ms, GLINK `IPCRTR`+`apr_audio_svc`
+  both ways, 8 QRTR services), then `sound=2 mic=4` verified the silent path (MI2S/ASM/ADM/COPP, 0 underflows) and the
+  microphone. The two TFA9874s (0x34/0x35) reach state 9 from Android's container `9871N1C`; the level is on the samples.
+  Firmware: `fw-audio/` (`adsp.b00`–`b18` from its modem `image/`, `tfa98xx.cnt` from its `/vendor/firmware`, read in
+  TWRP). See [subsystems/audio.md](subsystems/audio.md). Still to do: the earpiece route, headphones/USB-C (FSA4480),
+  calls (research/modem-sdx55.md), TFADSP protection.
+- **Still blocked on:** this phone's own `xbl` DXEs (the OnePlus 8 set is a placeholder), and the peripherals one at a time
+  (haptics, camera, modem).
+- **Next:** haptics (`haptic=5`, AW8697 at 0x5a, `aw8697_haptic_170.bin` into `fw-haptic/`), camera (`cam=5`), the X55
+  modem set.
+- **Camera, evidence only (2026-11-19, read-only; no `cam` run):** the 8T's cameras are its own: main **IMX586**
+  (semco), ultrawide **IMX481**, macro **GC5035**, mono **GC02M1B**, front **IMX471** (read from
+  `/vendor/lib64/camera` in TWRP; module/tuned files in `fw-camera/`, never in git). The 8 Pro's
+  `instantnoodle_camera.c` is gated to `instantnoodlep_board()` and its IMX586 entry uses the 8 Pro's ultra rails,
+  so kebab needs its own table and gate before any `cam=1`. Plan in
+  [subsystems/input-peripherals.md](subsystems/input-peripherals.md) "Cameras: OnePlus 8T": `cam=1` look, `cam=2`
+  power the main as its DT says and read its ID (0x0586), then 3/4 and 5.
+- **Camera `cam=1` on the 8T (2026-11-19, read-only, no panic, run `163555`):** kebab now enters the camera
+  driver's look (`hk_camera.c` + `instantnoodle_camera.c` accept `board=kebab`); CAMCC is not read because the
+  GCC's camera AHB clock is off, as designed; `cam>=2` and `cam=5` are refused until the 8T's own sensor table
+  exists. Its resets from the live DT: main gpio 93, rear_aux 92, rst2 78, active_3 109, active_4 130, active_5
+  131, MCLK6 100. Next: a kebab pin table and the main IMX586's power-up (`cam=2`).
+- **Camera port plan (needs a fresh session; nothing written yet):** `tools/camsensor.py` on
+  `fw-camera/com.qti.sensormodule.semco_imx586.bin` gives the 8T's main: slave 0x34 (7-bit **0x1a**), id
+  **0x0586** at register `0x16`, **3 C-PHY trios**, power order VANA → CUSTOM_REG1 → **CUSTOM_GPIO1** → VAF →
+  VDIG → VIO → MCLK 19.2 MHz → RESET, modes 0..8 (4000x3000 at 30 fps, 2000x1128 at 240 fps), `res0`..`res8`,
+  `init` (1709 writes), group hold and test pattern off. Its DT supplies: `cam_vio` pm8008 LDO4 (1.8 V),
+  `cam_vdig` pm8150a S8 (1.2 V), `cam_vana` pm8008 LDO7 (2.9 V), `cam_v_custom1` pm8150 S5/smpa5 (1.875 V),
+  `cam_vaf` pm8008 LDO3 (2.8 V), `cam_clk` titan_top_gdsc. The `struct sensor` has one `vana`, one `vdig`, one
+  `custom` and one `vaf` and no VIO or second GPIO, so extend it (and `power_up()`) before `cam=2`; every write
+  read back, any surprise switches all off. Then the
+  CSIPHY must be set for **C-PHY** (3 trios), which the 8 Pro path never did.
+- **The 8T's main node, last bits (live DT `qcom,cam-sensor@0`):** `cci-master = <0>`, `pinctrl-0` =
+  mclk0 + `cam_sensor_active_rear` + its VDIG and CUSTOM1 states; `gpios` = `CAM_MCLK0` (TLMM 94),
+  `CAM_RESET0`, `CAM_CUSTOM1` (TLMM **139**) and `CAM_VDIG` (TLMM **117**); `gpio-req-tbl-flags` = <1 0 0 0>
+  (MCLK the only one initially high). So the 8T's TLMM is at **0x0f000000** (one tile; the 8 Pro's are
+  0x0f100000/0x0f500000/0x0f900000, so its tile/pin labels must not be reused). Reset is **gpio 93**, MCLK
+  **0** (gpio 94), VDIG is a **GPIO switch (117)**, CUSTOM_GPIO1 is **139**. So `cam=2` for kebab needs:
+  tile 0x0f000000, the IMX586 table, VIO (pm8008 LDO4), VDIG (gpio 117 + pm8150a S8), CUSTOM_REG1 (smpa5),
+  CUSTOM_GPIO1 (gpio 139), VAF (pm8008 LDO3), MCLK0, reset 93, CCI master 0, C-PHY 3 trios.
+- **What is missing, exactly (checked in the code, 2026-11-19):** `pm8008_get/pm8008_put` are `static` in
+  `hk_camera.c` and are not offered to `instantnoodle_camera.c`, which has no way to set a pm8008 LDO; the 8T
+  needs one exported helper (e.g. `hk_camera_pm8008_set(ldo, mv, on)` that reads back and retries like the
+  static one), then the `struct sensor` gains VIO and CUSTOM_GPIO1, the kebab table (tile **0x0f000000**) goes
+  in, and the CSIPHY is set for **C-PHY** (3 trios; `cam_cphy=1` to try it) instead of D-PHY. Build and run
+  `cam=2 cam_slot=0` afterwards, one write with read-back; any surprise switches all off.
+  The audio plug-in and the motor open `/dev/hk-audio` and `/dev/hk-haptic` (K27). The 8T's
   65 W Warp charging and lack of wireless charging mean the 8 Pro's charging limits must not be copied. No flash without fresh per-write
   approval.
 

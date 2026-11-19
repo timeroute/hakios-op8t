@@ -96,14 +96,24 @@ on the OnePlus 8 (system feedback, CoreHaptics).
 ### Flashlight (`hk_torch.c`, `torch=N`)
 
 Redwood: the PM8350C flash LED module (SPMI slave 2, `0xee00`), channel 0 at Android's torch current 125 mA
-(12.5 mA resolution). OnePlus 8: PM8150L, both LEDs. `torch=1` looks, `2` lights for `torch_secs`, **`3` is the mode for
+(12.5 mA resolution). OnePlus 8 and 8T: the PM8150L's flash LED module (slave 5, `0xd300`; its temperature alarm on
+slave 4, `0x2400`), 125 mA a channel. `torch=1` looks, `2` lights for `torch_secs`, **`3` is the mode for
 iOS**: `/dev/hk-torch` takes a level 0..1000 (thousandths of Android's current, never above it). Limits: the light on at
 most `torch_max_s` (default 30, max 120) at a time; the module's fault and over-temperature flags, the PMIC's
 temperature alarm and the battery's temperature (45 C) are checked ten times a second and any trouble switches it off for
 the run. Every write goes through one function that takes only this module's registers, with read-back. iOS side:
-the loader tells MobileGestalt the camera has a flash (`/product/camera "flash"`) and `libhackios-media.dylib` in
+the loader tells MobileGestalt the camera has a flash (`/product/camera "flash"`) and `libhakios.media.dylib` in
 mediaserverd gives `FigFlashlight` (which finds no camera) a device of ours whose torch level is written to
-`/dev/hk-torch` (Control Center's button and AVFlashlight). Verified on both.
+`/dev/hk-torch` (Control Center's button and AVFlashlight).
+
+Verified on the 8T (kebab) on 2026-11-19, owner-observed: `torch=1` found channel 97 (`0x105d300`, ours to write)
+and the module (`type 0x18, subtype 0x04`); `torch=2 torch_secs=30` lit both channels at `ITARGET` 9 (125 mA each)
+with interrupt status `0xd0` (ramped up), no fault and temperature stage 0, then went dark by itself
+(`logs/105758-run.log`); `torch=3` let Control Center light it at **850/1000** (106 mA a channel) five times, each off
+at 0, and the run ended with the module reading `enable 0000, channels 0000, target 0000` (`logs/110348-run.log`). The
+safety timer reads `0x93` there; the driver writes the vendor constant `0x13` (enable bit clear, PM8150L + PM8350C),
+which read back. The same run showed the userland half still opening the pre-rename `/dev/hakios-*` names (K27); the
+kernel's nodes are `/dev/hk-torch`, `hk-haptic`, `hk-audio`, `hk-mic`, `hk-camera` (and both touch names).
 
 ### Battery and charger (`hk_battery.c`, `instantnoodle_battery.c`, `HKBattery.cpp`)
 
@@ -125,8 +135,57 @@ turned on by the image (`SBShowBatteryPercentage`).
 - A UIDevice fallback in SpringBoard (`inject_sb.c`) still reads `kern.hackios.battery_soc/charging` when no power source
   exists; once `HKBattery` is there the hooks hand everything to iOS's own code.
 
-### Cameras (redwood only: `hk_camera.c`, `cam=N`)
+### Cameras: OnePlus 8T (kebab), read from its own Android (2026-11-19, read-only)
 
+The 8T's camera hardware is *not* the 8/8 Pro's, so `instantnoodle_camera.c` (IMX689, gated to
+`instantnoodlep_board()`) must not be pointed at kebab as it is. From `/vendor/lib64/camera` in a
+TWRP RAM boot (mounted `/vendor`; Android's shell is denied), read-only, outside the repositories
+in `fw-camera/` (`com.qti.sensormodule.*` and `com.qti.tuned.*`):
+
+| position | sensor | module |
+|---|---|---|
+| main (slot 0, DT `cam-sensor@0`, csiphy 0, actuator + OIS + flash) | **Sony IMX586** 48 MP | `com.qti.sensormodule.semco_imx586.bin` |
+| ultra-wide (slot 1, csiphy 1) | **Sony IMX481** 16 MP | `com.qti.sensormodule.qtech_imx481.bin` |
+| macro (slot 4, csiphy 2) | **GalaxyCore GC5035** 5 MP | `com.qti.sensormodule.shine_gc5035.bin` |
+| mono (slot 3?) | **GalaxyCore GC02M1B** 2 MP | `com.qti.sensormodule.holitech_gc02m1b.bin` |
+| front (slot 2, csiphy 4, roll 270) | **Sony IMX471** 16 MP | `com.qti.sensormodule.truly_imx471.bin` |
+
+The device tree's `qcom,cam-sensor@0` names its rails: `cam_vio`, `cam_vdig` (1.35 V), `cam_vana`
+(2.9 V), `cam_v_custom1` (2.0 V), `cam_vaf` (2.8 V) and `cam_clk`, with `actuator-src`,
+`eeprom-src`, `ois-src` and `led-flash-src`; `@1`, `@4` and `@2` (front) have their own sets. The
+existing IMX586 entry is the 8 Pro's *ultra*, on the wrong rails (PM8009 GPIO 1, smpa5, ldoc7), so
+the 8T needs its own table and its own board gate.
+
+**Plan (one step at a time, behind `cam=N`):** `1` the look (clocks, CCI, pins; reads only), `2` the
+main IMX586 powered as its device tree says and its chip ID read (register `0x0016`, `0x0586`), `3` a
+CSID test pattern, `4` the sensor's own frames, then `5` for iOS. `tools/camsensor.py` turns the
+module files into register tables. Do not power the 8T's sensors with the 8 Pro's rails.
+
+**`cam=1` verified on the 8T (2026-11-19, read-only, no panic; `logs/163555-run.log`):** the driver
+now enters for `board=kebab` too, and prints `camera: cam=1: the OnePlus 8T's cameras, a look, reading
+only`; `camcc` is not read because the GCC's camera AHB clock is off (`0x80000000`, as designed);
+`cam>=2`, `cam=5` are refused with a line saying the 8T's sensor table is not there yet. The pins it
+printed are still the 8 Pro's labels, so they mean nothing for this phone.
+
+The 8T's own reset pins, from its live device tree (`pinctrl@f000000`): main `cam_sensor_active_rear`
+**gpio 93**, `rear_aux` **gpio 92**, `rst2` **gpio 78**, `active_3` **gpio 109**, `active_4` **gpio
+130**, `active_5` **gpio 131**, and MCLKs on `cam_mclk*` (`gpio100` is MCLK6).
+
+**Its main IMX586** (`com.qti.sensormodule.semco_imx586.bin`, read by `tools/camsensor.py`): slave
+**0x34 (8-bit, 7-bit 0x1a)**, id **0x0586** at register **0x16**, **3 C-PHY trios**; power-up order
+VANA, CUSTOM_REG1, CUSTOM_GPIO1, VAF, VDIG, VIO, MCLK 19.2 MHz, RESET; modes 0..8 (4000x3000 at 30 fps
+as modes 1/2, 2000x1128 at 240 fps as mode 4, 4000x2250 as mode 8), with `res0`..`res8`, `init` (1709
+writes), group hold and test pattern off. Its device tree's supplies: `cam_vio` = **pm8008 LDO4** (1.8 V),
+`cam_vdig` = **pm8150a S8** (1.2 V), `cam_vana` = **pm8008 LDO7** (2.9 V), `cam_v_custom1` =
+**pm8150 S5/smpa5** (1.875 V), `cam_vaf` = **pm8008 LDO3** (2.8 V), `cam_clk` = **titan_top_gdsc**.
+
+**Next (the actual port):** the existing sensor model has one `vana` (GPIO/regulator), one `vdig` (RPMh),
+one `custom` (RPMh) and one `vaf` (GPIO), with no VIO and no second GPIO. The 8T's sequence needs VIO
+(pm8008 LDO4), the VDIG (pm8150a S8), CUSTOM_REG1 (smpa5), **CUSTOM_GPIO1** (a GPIO, to be found in
+the 8T's camera dtsi), VAF (pm8008 LDO3) and the reset on gpio 93 — so the struct and `power_up()` must
+grow before `cam=2` may write anything. Every write is read back; any surprise switches all off.
+
+### Cameras (redwood only: `hk_camera.c`, `cam=N`)
 Redwood has four sensors: macro OmniVision OV02B10 (CCI 1 master 0, `0x3c`), wide Samsung S5KHM2SD 108 MP (CCI 0
 master 1, `0x20`, chip ID `0xfad2`), front OmniVision OV16A1Q 16 MP (CCI 0 master 0, `0x10`, ID `0x1641`), ultra-wide
 Samsung S5K4H7 8 MP (CCI 1 master 1, `0x2d`, ID `0x487b`), with the PM8008i supplying the LDOs. The driver was brought

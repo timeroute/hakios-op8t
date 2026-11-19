@@ -533,6 +533,7 @@ Sysctls: `kern.hackios.sensors` (the sensors SEE reported and their last values)
 | `touch_lat=1` | `inject.c`, `inject_sb.c` | latency lines |
 | `hkprof=1/2` | `hkprof.h` | userland sampling profiler (2: from process start) |
 | `gltrace*`, `glcensus`, `glshaders`, `glshow*`, `glskip`, `glplain`, `glwait`, `glcopy`, `glfetch`, `glgroup`, `vblur`, `glenv`, `glslow` | `eagl.c` | OpenGL ES debugging; see the header of `eagl.c` |
+| `sbwifi_trace=1` | `inject_sb.c` | Default off. Log Wi-Fi status view `setSignalMode:` and `setNumberOfActiveBars:` without changing either value. Diagnostic for the grey connected icon; no network identifiers logged. |
 | `metal_profile=1` | `hkmetal.m` | with `metal=2`: whole system on Metal; `metal_sync=1` fence per draw |
 | `metal_dump=NAME`, `metal_skip=NAME`, `metal_texlog=1` | `hkmetal.m` | the AIR of every pipeline function whose name has NAME, into `/private/var/tmp/hk_air/` (for `build/mesa-host/.../air2nir`); leave out the draws of pipelines whose "vertex / fragment" names contain NAME; each different fragment texture a draw samples, once, with texels of its first and last level (with `applog=1`) |
 | `ca_detach=1` | `inject.c` | lets CoreAnimation detach a layer to a display plane again (default: `CA_DISABLE_DETACHED=1` in backboardd: the framebuffer shows one layer only) |

@@ -17,6 +17,31 @@ It runs on:
 its UFS storage driver, display (DSC, 120 Hz), modem, Bluetooth, camera and lens drivers, the volume-up boot menu, and the Docker build scripts. The rest is their work and their
 contributors'; the commit history shows who changed what.
 
+### This repository: `hackios-op8t` (a fork for the OnePlus 8T)
+
+**Everything here comes from other people's work first.** This fork is a continuation, not a new project:
+
+```
+OOSEX GANG — hackios-xnu-kernel  ─┐
+        (and iphont-xnu-kernel)   ├─►  dekefake/hackios-op8pro  ──►  timeroute/hakios-op8t (this repo)
+OOSEX GANG — hackios-xnu-userland ┘            (OnePlus 8 Pro port)        (OnePlus 8T, kebab, port)
+```
+
+- **[oosexgang/hackios-xnu-kernel](https://github.com/oosexgang/hackios-xnu-kernel)** — HackiOS itself: the XNU
+  patches, the loader, the Wi-Fi stack, the redwood and OnePlus 8 ports, and all of the documentation this
+  repository is built on. By **OOSEX GANG** (see [Team](#team)).
+- **[dekefake/hackios-op8pro](https://github.com/dekefake/hackios-op8pro)** — the OnePlus 8 Pro port this fork is
+  taken from: its UEFI package, UFS, display, modem, Bluetooth, camera and lens drivers, and the build scripts.
+- **This fork** — the OnePlus 8T (`kebab`, KB2000) port on that base: its device profile and panel geometry
+  (1080x2400, rendered at 1290x2796), its Synaptics S3908 touch driver, the Adreno 650 + Mesa drawing on that
+  board, the flashlight, Wi-Fi through ath11k with this phone's own firmware, the audio DSP and its two TFA9874
+  amplifiers, and the kernel side of its QCA6390 Bluetooth. See [docs/devices/kebab.md](docs/devices/kebab.md)
+  and [docs/HANDOFF.md](docs/HANDOFF.md) for the exact state of each.
+
+If you want to use or redistribute this, please credit **OOSEX GANG** and the upstream repositories above, and
+keep their notices: the [LICENSE](LICENSE) and [NOTICES](prebuilt/NOTICES.md) files are theirs and are not ours to
+change. Bug reports about the 8 Pro, redwood or the core of HackiOS belong upstream.
+
 This repository is half of the project:
 
 | Repository | What |
@@ -68,7 +93,7 @@ On the **POCO X5 Pro** (as last documented; not re-verified recently): lock/home
 Needs Linux x86-64, ~12 GB free disk, 4 GB free RAM, and packages listed in [docs/BUILD.md](docs/BUILD.md) (7-Zip 23+, QEMU, edk2 aarch64).
 
 ```sh
-git clone https://github.com/dekefake/hackios-op8pro.git hackios
+git clone https://github.com/timeroute/hakios-op8t.git hackios
 cd hackios
 common/setup.sh               # brings hackios-xnu-userland into the same tree, checks the host
 ios165/fetch.sh               # downloads 7.4 GB from Apple's CDN and extracts what is needed (5-15 min)
@@ -201,3 +226,8 @@ Other images in `docs/images/` (health, news, reminders, GPU first frame, ...) a
 HackiOS is by OOSEX GANG;
 the OnePlus 8 Pro port in this repository is built on their work. OOSEX GANG — [@oodze](https://t.me/oodze) (founder), [@netusd](https://t.me/netusd), [@wannqn](https://t.me/wannqn),
 [@hxfuxyyXD](https://t.me/hxfuxyyXD). News: [t.me/oosexgangdevs](https://t.me/oosexgangdevs).
+
+The **OnePlus 8T port** in this fork (device profile, touch, GPU/Mesa on that board, torch, Wi-Fi, audio, and the
+kernel side of Bluetooth) is maintained by **timeroute**. It is a port of OOSEX GANG's and dekefake's work, and
+none of it would exist without them; all credit for HackiOS itself, the OnePlus 8 Pro port and the userland belongs
+to their authors. Please keep this notice with any copy.

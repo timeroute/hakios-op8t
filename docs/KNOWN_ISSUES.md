@@ -203,6 +203,23 @@ First seen 2026-11-19, the day the 8T's window server started drawing with the A
 - **Fix:** `fbwidth=1290 fbheight=2796` in `xnuloader/loader.c`'s `platform_kebab.default_args` (and in
   `common/devices/kebab.conf`); nothing flashed.
 
+## K27 Userland opened the kernel's devices under their old names — all phones · **Fixed** (2026-11-19, 8T verified)
+- **Observed:** on the 8T, `the speaker is with the HAL (/dev/hakios-audio: No such file or directory)` in the logs,
+  and Control Center's flashlight did nothing. The kernel's nodes are `/dev/hk-*`.
+- **Cause:** the commit that took the device name out of the kernel (`469d969`, 2026-10-23) renamed the nodes to
+  `/dev/hk-audio`, `hk-mic`, `hk-haptic`, `hk-torch`, `hk-camera` — and only `hk_input.c` kept the old name as an alias.
+  The userland half in `root.apfs` (the audio HAL plug-in, the media library, the test programs, `hakios.audio.h`,
+  `hakios.camera.h`) still opened `/dev/hakios-*`, so those bridges opened nothing, said so once and carried on: the
+  speaker, the motor, the microphone, the flashlight and the camera were silently dead. Found when `torch=3`'s
+  Control Center button was wired up for the 8T.
+- **Fix:** the userland opens the nodes the kernel makes (`userland/src/`: `audio_plugin.c`, `sound_test.c`,
+  `record_test.c`, `inject_media.c`, `camera_device.c`, `torch_test.c`, `camera_test.c`, `camera_avtest.m`,
+  `hakios.audio.h`, `hakios.camera.h`). Touch is left alone: the kernel makes both `hk-touch` and `hakios-touch`.
+  `root.apfs` must be rebuilt; a `system.apfs`'s own binaries never had these strings.
+- **Verified:** `logs/110348-run.log`: `mediaserverd: the kernel has a flashlight (/dev/hk-torch)`, iOS asked
+  850/1000 five times and the kernel lit and darkened it each time. The speaker, motor, microphone and camera have
+  not been re-tested with the new names yet (the 8T's next peripherals will).
+
 ## K16 Boot and recovery limits — OnePlus 8 · **Limitation** · S2
 - A reset with the **USB cable in** makes the stock ABL take the port for a wall charger: fastboot never appears on USB and the phone switches off. Unplug, enter the mode, replug. Menu entries wait up to 60 s for the cable to come out.
 - The 5 s menu countdown is too short to pick Developer mode by hand.
@@ -250,6 +267,22 @@ The physical phone still runs loader 0.5 without the new `getvar:iphont` extensi
 
 ## K46 Signal and Wi-Fi icons are drawn at about half their alpha — **Open** · S3
 - Measured on a screenshot: lit bars at 50% (and dim ones at 9%) of their colour; view alpha, layer opacity and colours are 1.0 / 0.2 (activeColor/inactiveColor), the signal view's layer carries a gaussianBlur filter (removing it collapses the bars to dots), RGB instead of gray colours changed nothing. Probably the compositor (libhackios-gl); the clock, battery and moon are right.
+- **2026-11-19, 8T:** owner reports a grey Wi-Fi icon despite joining in Settings and loading Safari pages.
+  Same compositor fault is a hypothesis, not yet measured on this board; diagnostic GL traces are in progress.
+  The simultaneous “Weak Security” warning is separate: the AP uses CCMP pairwise but TKIP group encryption
+  (`logs/135139-run.log`).
+- **8T tracing, 2026-11-19:** retained snapshots of run `135552` show all three status-bar Wi-Fi
+  masks (59 x 42, textures 598–600) drawn with vertex colour alpha **0.199951** (e.g. frame 796,
+  draws 101–103); the connected Settings screenshot shows the grey glyph while the list glyph
+  is black. Thus the input to GL is already dimmed, not solely an unexplained loss of alpha in
+  the compositor. Why UIKit supplies inactive-looking colours (mode, bars, or another upstream
+  state) is still unverified; this does not resolve the older 8 Pro measurement.
+- **8T `140103`, pass-through UIKit tracing:** after a successful join, `setSignalMode:2`
+  (active) and `setNumberOfActiveBars:0` are received twice. wifid logs -57 dBm at join.
+  The immediate reason for the grey arcs is zero active bars despite a usable signal, not an
+  inactive mode. RSSI-to-bars calculation / reporting is under investigation; no fix verified.
+- **8T follow-up `141532`:** implementing the 16-byte signed-dBm RSSI bounds made request 106
+  valid but did not change zero bars. Owner chose not to pursue the cosmetic icon further.
 
 ### K44 addendum (2026-10-29, later): what more was learnt about the auto-join
 - The auto-join pass is wifid's `[corewifi] AUTO-JOIN: Scan` (it starts ~10-20 s after boot and again with backoff). It issues Apple80211 request **383** (4104 bytes, a scan for several names; refused before, now taken as an all-channel scan) and several SCAN_REQ (10) at once. Outcome by variant (log lines of wifid): original `Scan FAILED (duration=0ms, results=0, error=1)`; with 383 taken the same; one SCAN_DONE per request: wifid logs `Event APPLE80211_M_SCAN_DONE is not expected while there is no command pending` for each; a second request answered EBUSY: `Scan FAILED (duration=1514ms, results=0, error=16, liveCount=12)`; requests that block until their scan is over: `Scan FAILED (duration=1147ms, ..., error=(2 'Failed to perform scan'), liveCount=11)`. So with scans that complete, wifid does read live results (liveCount 11-12) but still ends in a failure and sends no ASSOCIATE. All variants were reverted to the original asynchronous behaviour (the tree keeps COUNTRY_CODE, 383/365/419 accepted, and the live logging).

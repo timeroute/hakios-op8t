@@ -12,7 +12,8 @@
  * steps: "Assert the reset of endpoint", "PHY is ready", "Release the reset", "link initialized"
  * at 5 GT/s x1, BAR 0 at 0x60300000 (1 MB), MSI from GIC 800 on.
  *
- *   power    the radio's supplies through RPMh -- pm8150 S6 0.95 V (aon), pm8009 S2 0.95 V (dig),
+ *   power    the radio's supplies through RPMh -- pm8150 S6 0.95 V (aon), pm8009 S2 0.95 V (dig; the 8T's
+ *            device tree feeds dig from pm8150 S6 as well, so on kebab smpf2 is not touched),
  *            pm8150 S5 1.9 V (rfa1), pm8150a S8 1.35 V (rfa2), pm8150a L5 1.8 V (the antenna
  *            switch); its 1.8 V I/O (pm8150 S4) is the UFS's too and always on -- then WLAN_EN
  *            (gpio20) high, 1 ms; for the PHY pm8150 L9 1.2 V and L5 0.88 V (the UFS PHY's as
@@ -268,17 +269,28 @@ reset_pulse(uint32_t bcr)
 
 /* ---- power and clocks ------------------------------------------------------------------------------ */
 
+/*
+ * The module's dig pin: pm8009 S2 (smpf2) on the OnePlus 8 and 8 Pro. The 8T's device tree takes both the dig
+ * and the aon pin from pm8150 S6 (smpa6; "vdd-wlan-dig-supply" and "vdd-wlan-aon-supply" are the same handle),
+ * pm8009 S2 is wired to nothing there (no node of its device tree refers to it), so the 8T leaves it at
+ * Android's setting (512 mV, off) instead of taking it to 0.95 V -- which on a board where it powers
+ * something else would be a wrong rail.
+ */
 static bool
 radio_supplies(bool on)
 {
+	bool dig = !kebab_board();              /* (smpf2 is the module's dig rail on the 8 and 8 Pro only) */
+
 	if (!on) {
 		/* (only the radio's own: the others are shared, see the top of this file) */
 		instantnoodle_supply("ldoc5", 1800, false);
-		instantnoodle_supply("smpf2", 950, false);
+		if (dig) {
+			instantnoodle_supply("smpf2", 950, false);
+		}
 		instantnoodle_supply("smpa6", 950, false);
 		return true;
 	}
-	return instantnoodle_supply("smpa6", 950, true) && instantnoodle_supply("smpf2", 950, true) &&
+	return instantnoodle_supply("smpa6", 950, true) && (!dig || instantnoodle_supply("smpf2", 950, true)) &&
 	       instantnoodle_supply("smpa5", 1900, true) && instantnoodle_supply("smpc8", 1350, true) &&
 	       instantnoodle_supply("ldoc5", 1800, true) && instantnoodle_supply("ldoa9", 1200, true) &&
 	       instantnoodle_supply("ldoa5", 880, true);

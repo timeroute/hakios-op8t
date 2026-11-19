@@ -295,8 +295,20 @@ power_up(void)
 	uint32_t before = rd(gcc52, GCC_VOTE);
 
 	say("bt: bt=2: the QCA6390's Bluetooth powered on as Android does it\n");
-	say("bt: next: RPMh rails smpa6 950, smpf2 950, smpa5 1900, smpc8 1350 (the radio's, shared with Wi-Fi) and ldoa16 3300 mV (Bluetooth's own)\n");
-	if (!instantnoodle_supply("smpa6", 950, true) || !instantnoodle_supply("smpf2", 950, true) ||
+	/*
+	 * The OnePlus 8T's device tree takes both the aon and the dig pin from pm8150 S6/smpa6,
+	 * as its Wi-Fi does: there is no smpf2 rail there, and a vote for it would be a rail of
+	 * another board's.
+	 */
+	if (instantnoodlep_board()) {
+		say("bt: next: RPMh rails smpa6 950, smpf2 950, smpa5 1900, smpc8 1350 (the radio's, shared with Wi-Fi) and ldoa16 "
+		    "3300 mV (Bluetooth's own)\n");
+	} else {
+		say("bt: next: RPMh rails smpa6 950 (the aon and the dig pin both), smpa5 1900, smpc8 1350 (the radio's, shared with "
+		    "Wi-Fi) and ldoa16 3300 mV (Bluetooth's own)\n");
+	}
+	if (!instantnoodle_supply("smpa6", 950, true) ||
+	    (!kebab_board() && !instantnoodle_supply("smpf2", 950, true)) ||
 	    !instantnoodle_supply("smpa5", 1900, true) || !instantnoodle_supply("smpc8", 1350, true) ||
 	    !instantnoodle_supply("ldoa16", 3300, true)) {
 		say("bt: RPMh did not take a rail's vote\n");
@@ -1831,7 +1843,7 @@ instantnoodlep_bt_init(void)
 {
 	thread_t thread;
 
-	if (!instantnoodlep_board() || !PE_parse_boot_argn("bt", &level, sizeof(level)) || level == 0) {
+	if ((!instantnoodlep_board() && !kebab_board()) || !PE_parse_boot_argn("bt", &level, sizeof(level)) || level == 0) {
 		return;
 	}
 	if (level > 6) {

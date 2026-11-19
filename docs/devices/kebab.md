@@ -1,6 +1,6 @@
 # OnePlus 8T (kebab, KB2000) — Snapdragon 865 (SM8250, "kona")
 
-**Status 2026-11-18, verified on the phone: iOS 16.5 boots to SpringBoard from RAM, touch works (Synaptics S3908, TCM), and the Adreno 650 starts (`gpu=1`, steps 1–21).** Profile `common/devices/kebab.conf`, UEFI target `kebab` (Mu-Silicium carries `Platforms/OnePlus/kebabPkg` upstream), loader platform `platform_kebab`, kernel `board=kebab`. The phones with working iOS are [instantnoodle.md](instantnoodle.md) (8) and [instantnoodlep.md](instantnoodlep.md) (8 Pro). The rest of this page keeps the 2026-11-17 reading of the phone (device tree, ABL log) and the first boot, then what the 2026-11-18 runs established.
+**Status 2026-11-19, verified on the phone: iOS 16.5 boots to SpringBoard from RAM, touch works (Synaptics S3908, TCM), the Adreno 650 draws through Mesa at 1290x2796 (50–59 fps, `fb_push=2`), the flashlight works from Control Center (`torch=3`), and Wi-Fi joins from Settings and loads a page in Safari (`wifi=1`, owner-confirmed).** Profile `common/devices/kebab.conf`, UEFI target `kebab` (Mu-Silicium carries `Platforms/OnePlus/kebabPkg` upstream), loader platform `platform_kebab`, kernel `board=kebab`. The phones with working iOS are [instantnoodle.md](instantnoodle.md) (8) and [instantnoodlep.md](instantnoodlep.md) (8 Pro). The rest of this page keeps the 2026-11-17 reading of the phone (device tree, ABL log) and the first boot, then what the 2026-11-18 runs established.
 
 ## What is known about this phone (observed, read-only)
 
@@ -103,12 +103,24 @@ or a trip through Android empties RAM and it must be uploaded again).
 
 ## What is still unverified / next
 
+**Bluetooth kernel path verified in RAM, 2026-11-19:** `bt=1` through `bt=6`
+pass on this QCA6390 with the phone's own patch/NVM: `/dev/hk-bt` transports
+HCI packets (7/7 self-tests, 100/100 long events) and
+`com.apple.uart.bluetooth` registers (`logs/174332-run.log`). **iOS discovery,
+pairing and Bluetooth audio are not yet verified**: this root image has no
+BlueTool/bluetoothd support. See [../subsystems/bluetooth.md](../subsystems/bluetooth.md).
+
 (History: the first supervised RAM-only boot was on 2026-11-17, while ColorOS 14 on this model was
 said to refuse `fastboot boot` and never booted slot a; this phone is HydrogenOS 11, where
 `fastboot boot` works — `xl enter` has been the delivery route for every run since.)
 
-1. **Mesa/OpenGL ES (`GL=1`) and the profile's `USERLAND_VARS`**, so CoreAnimation draws with the GPU the kernel now keeps on: `tools/mk-mesa.sh` builds `libOSMesa.8.dylib` + `libhakios.gl.dylib`, which `userland/build.sh GL=1` puts in `root.apfs` (`root/lib/`), so no system image is rebuilt. Until then `gpu=1` changes nothing on the glass.
-2. **Audio, haptics, torch, Wi-Fi, camera, modem** — one boot-arg group at a time, each after a run, each only added to `kebab.conf` once the phone has shown it.
+1. **Mesa/OpenGL ES (`GL=1`) is done**, verified 2026-11-19 as described above; keep the profile's `USERLAND_VARS` when rebuilding.
+   The **audio DSP and the speakers** are done too, in RAM only (`adsp=1 sound=4 sound_amps=1 sound_below=96`,
+   owner-heard 2026-11-19): see [../subsystems/audio.md](../subsystems/audio.md) for its firmware (`fw-audio/`: this
+   phone's `adsp.*` and `tfa98xx.cnt`). Still to do there: the earpiece route, headphones/USB-C (FSA4480), calls.
+2. **Haptics, audio, camera, modem** — one boot-arg group at a time, each after a run, each only added to `kebab.conf` once the phone has shown it. Flashlight (`torch=3`) and Wi-Fi (`wifi=1`) are done, owner-verified 2026-11-19. Wi-Fi uses linux-firmware QCA6390 firmware and this phone's complete `14wlan.b0c` ELF staged as `fw-wifi/12wlan.b0c`; kebab skips the 8's `smpf2` dig rail. See [../subsystems/wifi.md](../subsystems/wifi.md). The owner deferred the motor to prioritise Wi-Fi; the next peripheral is not yet chosen. The Wi-Fi icon remains grey and Settings says “Weak Security”, but Safari loads pages; the display/security-warning cause is unverified.
+   Maps search results, place data and photos also load over Wi-Fi; its blank map canvas is a
+   rendering/Metal issue on this 8T build, not a failed tile network path (`out/maps-wifi-no-tiles.png`).
 3. **The DXEs from this phone's `xbl`** (UEFIReader): the OnePlus 8 set in `uefi/files/Binaries/kebab/` is a placeholder; never commit vendor binaries.
 4. Only then an installed image and a flash — every partition write needs fresh, per-write approval.
 

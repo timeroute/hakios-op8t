@@ -4,9 +4,143 @@ Short, actionable, and dated. It does **not** replace [TODO.md](TODO.md) (roadma
 it says where the work stands *today*. **Update this file after every substantial session** (rules in [../AGENTS.md](../AGENTS.md)); keep it under ~150 lines and move
 anything that has aged into the right permanent page.
 
-**Last updated: 2026-11-19** (section 0f, OnePlus 8T: GPU drawing, K25's text bars and Control Center black fixed, K26's keyboard fixed); before that 2026-11-17 (sections 0d, 0e: 8 Pro documentation sync; OnePlus 8T port scaffolding); before that 2026-11-13 (section 0c); before that 2026-11-07 (sections 0a, 0b); before that 2026-11-02 (section 0, OnePlus 8 Pro cellular); before that 2026-10-26 ~04:55 MSK by the scheduler session (sections 2, 3, 4, 7 for the scheduler; the rest as the documentation session left it at ~03:30). **Checked state** = what I ran/read on that date; **historical** = taken from earlier session notes and flagged as such.
+**Last updated: 2026-11-19** (section 0f, OnePlus 8T: GPU drawing, K25's text bars and Control Center black fixed, K26's keyboard fixed, the flashlight works from Control Center (`torch=3`) and K27's `/dev/hakios-*` names fixed); before that 2026-11-17 (sections 0d, 0e: 8 Pro documentation sync; OnePlus 8T port scaffolding); before that 2026-11-13 (section 0c); before that 2026-11-07 (sections 0a, 0b); before that 2026-11-02 (section 0, OnePlus 8 Pro cellular); before that 2026-10-26 ~04:55 MSK by the scheduler session (sections 2, 3, 4, 7 for the scheduler; the rest as the documentation session left it at ~03:30). **Checked state** = what I ran/read on that date; **historical** = taken from earlier session notes and flagged as such.
 
-## 0f. OnePlus 8T (kebab), 2026-11-18 — boots iOS 16.5, touch works, the GPU starts (RAM only)
+## 0f. OnePlus 8T (kebab), 2026-11-19 — iOS, touch, GPU, flashlight and Wi-Fi work (RAM only)
+
+- **Bluetooth, 2026-11-19:** `bt=4` in `logs/171903-run.log` loaded this phone's
+  patch (184,316 B, 759 segments) and NVM (5,733 B, 24 segments), zero anomalies,
+  upgraded patch `0x0d2b` to `0x250a`, and answered HCI Reset/version/address
+  queries at 3.2 Mbaud. `bt=5` in `logs/173325-run.log` passed all 7 transport
+  tests, 100/100 long events, 106 packets each way, zero bad bytes and created
+  `/dev/hk-bt`, no panic. **The controller remains powered** after `bt=5`; there
+  is no stop hook. Before `bt=6` cold test, reboot via loader/Android and re-upload
+  resident `userland/system.apfs`. Current `userland/build.sh` has no Bluetooth
+  userland path, so `bt=6` can prove kernel control registration only, not iOS
+  discovery/pairing. Nothing flashed or committed.
+  **`bt=6` verified after cold reboot:** `logs/174332-run.log` shows 7/7 H4
+  tests, 100/100 long HCI events, 106 sent/received, zero bad bytes,
+  `/dev/hk-bt` created, and `com.apple.uart.bluetooth` registered (status 0);
+  normal return to loader, no panic. No iOS client connected in this image.
+  The controller remains powered in loader RAM after `bt=5/6`; reboot before
+  another cold Bluetooth bring-up. Next task, if requested: add the missing
+  iOS BlueTool/bluetoothd support in userland and verify actual discovery.
+
+- **Wi-Fi now works, owner-confirmed 2026-11-19:** Settings joins and Safari loads a page in run `133309`
+  (`logs/133309-run.log.live`, final log with the same stem). Prior run `115739` verifies PCIe 5 GT/s x1,
+  MHI/QMI and 2.4/5 GHz scans. Built ath11k (`tools/mk-ath11k.sh`, 0 driver stubs) and relinked XNU
+  (`BUILD_DSYM=0`, 16,915,352 bytes at 11:44; trailing symbolset/export errors only).
+  Uncommitted `instantnoodle_wifi.c` skips `smpf2` on kebab because aon/dig both use `smpa6`.
+  `fw-wifi/` has linux-firmware's QCA6390 `amss.bin` + `m3.bin`, this phone's complete **ELF**
+  `14wlan.b0c` staged as `12wlan.b0c` (57,844 bytes; Android log selects it), plus its private `mac`.
+  `userland/build.sh` packs these into `root/fw/`; `root.apfs` repacked. Files/dumps stay outside git.
+  Profile now enables `wifi=1` and `WIFI_ATH11K=1`; docs updated, nothing committed or flashed.
+  Owner reports grey Wi-Fi icon and “Weak Security” despite Safari working: the latter matches the
+  selected AP's TKIP group cipher (`logs/135139-run.log`, CCMP pairwise); grey icon cause unverified (K46),
+  sleep/reconnect not tested. Motor deferred at owner's request; ask which peripheral next.
+  Run `115101` only failed because Android/TWRP had cleared the resident `system.apfs` (missing launchd);
+  re-uploading it fixed the boot. Do not confuse that panic with a Wi-Fi failure.
+  **Active follow-up:** owner asked to continue with the grey icon, not stop at connectivity.
+  Diagnostic runs `134738` / `135139` returned without panic but did not isolate the status glyph;
+  the latter ended showing “Setting Language…”. Continuous right-side GL tracing is running next
+  (`out/wifi-icon-continuous.out`, 300 s, `XL_FOLLOW_KEEP=1` preserves snapshots); owner asked to join
+  then stay on the home screen. No renderer fix made yet. Avoid inferring “no join” from missing
+  lines in a truncated log — `135139` contains a successful join.
+  **Follow-up evidence:** run `135552` snapshots retained (`XL_FOLLOW_KEEP=1`); owner connected again.
+  `out/wifi-icon-joined-now.png` shows the grey status glyph with the network joined. Frame 796
+  draws 101–103 use three 59 x 42 A8 masks, all with vertex alpha 0.199951: input is already dimmed.
+  Investigate UIKit Wi-Fi signal mode / bars next, not a blind compositor alpha multiplier.
+  `inject_sb.c:signal_view_hook()` already knows `setSignalMode:` but only logs/changes cellular;
+  no Wi-Fi state hook or rendering fix has been made yet. Earlier assumption that the raw
+  trace Y range above 2616 selected the status bar was wrong: actual glyph raw Y is 65–107.
+  **Built diagnostic follow-up:** userland repo's `userland/src/inject_sb.c` now has
+  `sbwifi_trace=1` (off by default), subclass-local pass-through hooks for Wi-Fi `setSignalMode:`
+  and `setNumberOfActiveBars:`; no forced colours/modes. `xnu-clang` build passed; diagnostic image
+  `userland/root-wifi-ui.apfs` made, `userland/root.apfs` remains the prior image. The staging tree's
+  `root/lib/libhakios.sb.dylib` now holds the diagnostic library; original backed up at
+  `/tmp/opencode/libhakios.sb-before-wifi-trace.dylib`. New 300 s RAM run started
+  (`out/wifi-ui-state-run.out`), owner asked to connect then stay home. Inspect `hakios: wifi UI:`
+  lines next. Userland source change is uncommitted; no renderer fix claimed.
+  **Run `140103` result so far:** hooks loaded; after owner joins, Wi-Fi view receives
+  `setSignalMode:2` (active) but `setNumberOfActiveBars:0` twice. Thus do not force the mode.
+  wifid sees link RSSI -57 dBm at join, scans ~-54 dBm; the radio is not actually out of range.
+  Next investigate RSSI-to-bars conversion / missing RSSI_BOUNDS (request 106, 16 bytes, refused),
+  noise and link-quality/RSSI events. `hk_apple80211.c` currently returns RSSI unit 0, which matches
+  DBM in OpenIntelWireless's public apple80211_var.h; do not blindly change its unit.
+  **Current fix under test:** `hk_apple80211.c` in both `xnu/files` and `xnu-src` now answers
+  16-byte RSSI_BOUNDS as `{version=1,min=-128,max=127,threshold=-128}`. Evidence: iOS 16.5 wifid
+  calls `Apple80211CopyValue(106)` and reads dictionary keys RSSI_MIN/MAX/THRESHOLD; station signal
+  is the signed-byte `IEEE80211_HW_SIGNAL_DBM` value, and threshold 0 is invalid for all ordinary
+  negative dBm. This does not fabricate current RSSI. Kernel rebuild is running in
+  `out/kernel-rssi-build.log`; after success, RAM-run `root-wifi-ui.apfs` with `sbwifi_trace=1`
+  and have owner join once. Success criterion: request 106 answered and active bars >0.
+  **Result:** kernel built (16,915,472 bytes, 14:14; usual trailing export errors) and run
+  `141532` joined, but UIKit still got zero bars. Keep the standards-correct bounds answer,
+  but it did not fix the icon; owner asked not to pursue the icon further.
+  Owner then reported Safari works but Weather and App Store do not. These are poor generic
+  network controls: stock WeatherKit needs FairPlay/Mescal and this root has no Open-Meteo
+  stand-in (`inject.conf` injects libhakios.app only into Sileo); App Store is K11/FairPlay.
+  A 420 s RAM run is now starting (`out/wifi-apps-run.out`) for owner to test Maps loading/search
+  and Sileo source refresh as non-FairPlay app-network controls. Do not call Weather/App Store
+  failures a Wi-Fi routing failure without a failing neutral control.
+  **Maps control during that run:** owner searched Hangzhou successfully; screenshot
+  `out/maps-wifi-no-tiles.png` shows network-loaded place data and photos, while only the map
+  canvas is blank. This is not evidence of failed app networking: it matches the known Maps
+  rendering/Metal gap on a build whose 8T path is Mesa/OpenGL for CoreAnimation. Asked owner
+  to refresh Sileo sources as a second neutral network control.
+  **Audio started, 2026-11-19 (RAM only):** `adsp=1 adsp_loud=1` in run `152625` brought the
+  audio DSP up and kept it to the end with no panic: this phone's own image (18 segments,
+  17,540,176 B from its modem `image/adsp.*`, staged as test image `userland/root-audio.apfs`),
+  accepted by TrustZone, put at `0x8fe00000` (kebab's DT), the DSP up in 23 ms, GLINK `IPCRTR`
+  and `apr_audio_svc` open both ways, 8 QRTR services, clean shutdown on exit.
+  `userland/build.sh`'s `ADSP=1` branch now also copies `fw-audio/tfa98xx.cnt` (uncommitted).
+  **Silent path and mic verified** in run `153344` (`sound=2 mic=4`): MI2S/ASM/ADM/COPP all ran, a 1 kHz
+  tone wrote 159 periods with 0 underflows, and `/dev/hk-mic` became the iOS microphone. The container was
+  read from `/vendor` in a TWRP RAM boot (Android's shell is denied; `mount /vendor` there): `tfa98xx.cnt`,
+  3,953 bytes, magic `PM`, "stereo", `9871N1C`; now in `fw-audio/` and the test image.
+  Next: first audible test `sound=3 sound_amps=1` — 3 s tone at the default `sound_below` 240 (30 dB under
+  Android's maximum). The 8T's two TFA9874s are the 8/8 Pro's at 0x34 (reset GPIO 91) and 0x35 (reset
+  GPIO 99), profiles "speaker"/"receiver".
+  **Audio works, owner-heard (2026-11-19, RAM only):** `sound=3` (test tone) was not heard at `sound_below`
+  240; with `sound=4 sound_amps=1 sound_below=96` iOS's own sound came out of the speakers as its desktop
+  appeared. The amplifiers reached state 9 and were powered down at the end. `kebab.conf` now carries
+  `adsp=1 sound=4 sound_amps=1 sound_below=96` and `USERLAND_VARS="GL=1 ADSP=1"`, and `userland/root.apfs`
+  was rebuilt with `fw-audio/` (26.8 MB). Nothing flashed. Still to do: the earpiece route, headphones/USB-C,
+  calls, TFADSP protection.
+  **Camera evidence gathered, 2026-11-19 (read-only, no code run):** the 8T's sensors are not the 8 Pro's.
+  From `/vendor/lib64/camera` in a TWRP RAM boot (`mount /vendor`; Android denies shell): main **IMX586**
+  (semco), ultrawide **IMX481** (qtech), macro **GC5035** (shine), mono **GC02M1B** (holitech), front
+  **IMX471** (truly); their module and tuned files are in `fw-camera/` (outside the repos, never commit).
+  The 8 Pro's `instantnoodle_camera.c` is gated to `instantnoodlep_board()` and its IMX586 entry is the 8
+  Pro's ultra on the wrong rails, so kebab needs its own sensor table and board gate first.
+  See [subsystems/input-peripherals.md](subsystems/input-peripherals.md) "Cameras: OnePlus 8T".
+  Next: `cam=1` (look: clocks, CCI, pins) then `cam=2` (main IMX586 powered as its DT says, chip ID 0x0586).
+  **Bluetooth, evidence gathered and kernel change made (2026-11-19, no `bt` run yet):** the 8T's Bluetooth is
+  the 8 Pro's chip and wiring (QCA6390, `qup_uart@998000` serial engine 6, GPIO 16-19, BT_EN 21, sw-ctrl 124).
+  Its DT takes **both aon and dig from `smpa6`** (no `smpf2`), so `instantnoodle_bt.c` now accepts `board=kebab`
+  and skips `smpf2` there (smpa5/smpc8/ldoa16 are the same names); `xnu-src` has the same file. Still missing:
+  the phone's own `htbtfw20.tlv`/`htnv20.bin` from its bluetooth partition (TWRP, read-only) for
+  `instantnoodle_btfw.h`, then `bt=1`..`6`. See [subsystems/bluetooth.md](subsystems/bluetooth.md).
+  Kernel build with this change is in `out/kernel-bt-build.log` (judge by its date, not its tail).
+  **`cam=1` run on the 8T (2026-11-19, read-only, no panic, `logs/163555-run.log`):** `hk_camera.c` and
+  `instantnoodle_camera.c` now accept `board=kebab`; `cam=1` printed the look, CAMCC was (rightly) not read
+  while the GCC camera AHB clock is off, and `cam>=2`/`cam=5` are refused until the 8T's sensor table exists.
+  The printed pin labels are still the 8 Pro's, so they mean nothing for kebab. The 8T's own resets are in its
+  live DT (`pinctrl@f000000`): main gpio 93, rear_aux 92, rst2 78, active_3 109, active_4 130, active_5 131,
+  MCLK6 100. **Next:** a kebab pin table + the main IMX586's power-up (`cam=2`) from the DT's
+  `cam_vio`/`vdig`/`vana`/`v_custom1`/`vaf` rails, one write at a time with read-back. Kernel built
+  (16,915,472 B, 16:30) and both camera files are identical in `xnu/files` and `xnu-src`.
+  **Evidence for `cam=2` (read-only, same session):** `tools/camsensor.py` on
+  `fw-camera/com.qti.sensormodule.semco_imx586.bin` gives slave **0x34 (7-bit 0x1a)**, id **0x0586** at
+  `0x16`, **3 C-PHY trios**, power order VANA→CUSTOM_REG1→CUSTOM_GPIO1→VAF→VDIG→VIO→MCLK 19.2 MHz→RESET,
+  modes 0..8 (4000x3000 at 30 fps, 2000x1128 at 240 fps), `res0`..`res8` and `init` (1709 writes). Its DT
+  supplies: `cam_vio` pm8008 LDO4 (1.8 V), `cam_vdig` pm8150a S8 (1.2 V), `cam_vana` pm8008 LDO7 (2.9 V),
+  `cam_v_custom1` pm8150 S5/smpa5 (1.875 V), `cam_vaf` pm8008 LDO3 (2.8 V), `cam_clk` titan_top_gdsc.
+  The driver's sensor model lacks VIO and the second GPIO, so it must grow before `cam=2`; do not power the
+  8T's sensor with the 8 Pro's rails.
+  **Repo note:** `userland/build.sh` is tracked by *neither* repository (it is untracked in both indexes), so
+  its `ADSP=1` branch is outside version control like `fw-audio/` itself; the change is only in this
+  working tree. The rebuilt `userland/root.apfs` carries `fw/adsp.*` and `fw/tfa98xx.cnt` now.
 
 - **iOS boots to SpringBoard** from RAM (`./xl enter`, `XL_RAMDISK=userland/root.apfs`, resident `userland/system.apfs` uploaded with `./xl ramdisk`, ~95 s). A `fastboot boot` or a trip through Android empties RAM: re-upload the resident image before the next run.
 - **Touch works and the screen shows it.** New driver `xnu/files/bsd/dev/kebab_tcm.c` for the chip that actually answers, a **Synaptics S3908** (TouchComm/TCM) at I2C `0x4b`, reset/IRQ TLMM 38/39 — *not* the S6SY761 the live device tree names (that driver is now off unless `kebab_touch=1`). `logs/215439-run.log`: `1320 reports: 9 down, 1303 move, 8 up; 0 unreadable, 0 bad headers, 0 out of sync`, `tl: p` → `tl: i` in 50–70 µs, and `[TouchEvents] … <sceneID:com.apple.mobiletimer> … -> foreground` after the owner tapped Clock (Settings opened the same way). The owner's earlier "touch does nothing" was a run whose boot-args never reached the kernel (next line), not the chip.
@@ -32,6 +166,13 @@ anything that has aged into the right permanent page.
   1080 x 2400): the scaling is the kernel's, so the recording (`rec_secs`, 161 x 349 samples with `rec_step=8`) and
   `xl screenshot` (1080 x 2400) both show the panel's picture, not the framebuffer's — for the framebuffer itself,
   read `gFBWidth`/`gFBHeight` and the `MiniIOMobileFramebuffer: display …` line.
+- **Flashlight works, owner-observed (2026-11-19):** `torch=3` and Control Center, through `libhakios.media.dylib` in
+  mediaserverd and `/dev/hk-torch`, on the PM8150L's module (slave 5, `0xd300`, both channels): `torch=1` read channel 97
+  and the module, `torch=2 torch_secs=30` lit both at 125 mA (`0xd0` ramped up, no fault), `torch=3` lit it at 850/1000 =
+  106 mA a channel each tap and off at each tap, ending dark (`logs/105758-run.log`, `logs/110348-run.log`). The same work
+  found **K27**: the userland still opened the pre-rename `/dev/hakios-*` names (the kernel makes `/dev/hk-*`), so the
+  speaker, motor, microphone, flashlight and camera bridges had been opening nothing — the userland now uses `/dev/hk-*`,
+  and `root.apfs` was rebuilt. `kebab.conf` carries `torch=3`.
 - **A rebuilt `xnuloader/loader.efi` does not reach a phone that is already in the loader**: `xl enter` returns at once
   when it finds one (`xl: loader is up`) and `xl run` sends only the kernel and its ramdisk — so a change to the
   platform's `default_args` is silently not there. Use **`./xl reload`** (it reboots to Android and enters with the new
