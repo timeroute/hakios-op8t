@@ -27,9 +27,11 @@ anything that has aged into the right permanent page.
 - **K26 fixed the same session: the search keyboard ran off the right edge.** iOS was told the panel's own
   1080 x 2400 = 360 x 800 pt, which is no iPhone's size, so iOS 16.5 had no keyboard layout and drew a wider one from
   the left edge. `platform_kebab.default_args` (and `kebab.conf`) now say **fbwidth=1290 fbheight=2796** (430 x 932 pt,
-  the 8 Pro's since K43) and `fb_push=2` scales it to the panel; the home screen still draws 56-59 frames a second.
-  **The path is now 200 bytes per row different from the panel's** -- anything that assumes iOS pixels == panel pixels
-  on the 8T is wrong (the `xl screenshot` frames come out scaled by the loader, not cropped).
+  the 8 Pro's since K43) and `fb_push=2` scales it to the panel; the home screen still draws 56-59 frames a second, as
+  at 1080 x 2400. **iOS pixels are no longer panel pixels on this phone** (1290 x 2796 against the panel's
+  1080 x 2400): the scaling is the kernel's, so the recording (`rec_secs`, 161 x 349 samples with `rec_step=8`) and
+  `xl screenshot` (1080 x 2400) both show the panel's picture, not the framebuffer's — for the framebuffer itself,
+  read `gFBWidth`/`gFBHeight` and the `MiniIOMobileFramebuffer: display …` line.
 - **A rebuilt `xnuloader/loader.efi` does not reach a phone that is already in the loader**: `xl enter` returns at once
   when it finds one (`xl: loader is up`) and `xl run` sends only the kernel and its ramdisk — so a change to the
   platform's `default_args` is silently not there. Use **`./xl reload`** (it reboots to Android and enters with the new
