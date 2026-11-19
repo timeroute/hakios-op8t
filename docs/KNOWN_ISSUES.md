@@ -33,7 +33,8 @@ Nothing is marked "works" merely because a driver exists: evidence is stated. Fo
 | K20 | Redwood | Not re-verified | Unverified | S3 | | yes |
 | K21 | Installed build | Installed bundle lags the source | Limitation | S3 | yes | |
 | K22 | Agent toolkit | New USB mailbox/control path awaits owner-approved RAM loading | Unverified | S3 | yes | |
-| K25 | UI (8T) | GL: Control Center leaves black areas (text bars fixed) | Bug | S2 | kebab | |
+| K25 | UI (8T) | GL text and Control Center came out black: our image table refused textures | Bug | S2 | kebab, fixed 2026-11-19 | |
+| K26 | UI (8T) | Keyboard drawn wider than the screen (render size was no iPhone's) | Bug | S3 | kebab, fixed 2026-11-19 | |
 | K23 | Scheduling | Edge: rare 10-11 ms render frame under heavy DF load; BG starved when UT saturates E; energy model unvalidated | Partial | S4 | yes | untested |
 | K24 | Testing | `sleep` check can fail a correct sleep (continuous clock 0.4 s short once) | Bug (test) | S4 | yes | |
 
@@ -153,20 +154,25 @@ The installed boot keeps `/private/var` on flash (HFS+ on the OnePlus 8). Starti
 - Notification banner material has not been compared with a real iOS.
 - The app switcher cannot be opened by script (a test limitation, K19). Work: T22. Evidence: research/ios-userland.md.
 
-## K25 GL rendering on the 8T (kebab) — black after Control Center (the text bars are fixed) · **Bug** · S2
+## K25 GL rendering on the 8T (kebab): text as solid bars, black areas after Control Center · **Fixed** (2026-11-19, owner-verified in RAM runs)
 First seen 2026-11-19, the day the 8T's window server started drawing with the Adreno 650 (`gpu=1` + `GL=1`,
 50 frames a second). RAM runs only; nothing flashed.
 
-- **FIXED 2026-11-19 (text as solid bars).** The cause was ours, not Mesa's, the kernel's or the GPU's: the
+- **Cause (observed, both symptoms).** Ours, not Mesa's, the kernel's or the GPU's: the
   per-context image table (`struct image images[256]`, `userland/src/eagl.c`) filled up, `image_new()` refused new
   surface-backed textures ("more textures with IOSurfaces than there is room for", **225 times in one run**), their
   `-texImageIOSurface:` was dropped ("not done"), so those textures had no storage at all -- GL reported them as
-  `0 x 0` and every draw of one sampled a constant, which CoreAnimation's "colour x texture" painted as a solid
-  rectangle in the text's own colour. Found by tracing (`gltrace_at` + `gltrace_place` + `gltrace_look`): the draws
-  that painted the bars named textures `(0 x 0, 0x1908)`. The table is now 1024 and, when it is full, a slot is
-  taken from a texture that is gone or from the one looked at longest ago. Verified on the 8T: the page that always
-  showed it (Settings > General > iPhone Storage) has normal glyphs and no such message in the log. The earlier
-  "`glstill=0` fixes it" was a misreading (see below), as were `glcopy=1` and the render geometry.
+  `0 x 0` and every draw of one sampled an *incomplete* texture, which is opaque: CoreAnimation's "colour x texture"
+  painted a solid rectangle in the text's own colour, and a vibrant/blur layer painted black. Found by tracing
+  (`gltrace_at` + `gltrace_place` + `gltrace_look`): the draws that painted the bars named textures `(0 x 0, 0x1908)`.
+- **Fix and verification (2026-11-19, RAM runs, owner-verified).** `userland/src/eagl.c`: `struct image images[1024]`
+  and eviction when full (a texture that is gone first, else the one looked at longest ago). Log of the run after it:
+  `more textures with IOSurfaces…` 0 times (was 225), `-texImageIOSurface: … not done` 0 times, no eviction needed.
+  Settings > General > iPhone Storage — the page that always showed the bars — has normal glyphs; going through
+  Control Center and back leaves no black areas. **Separated** (RAM run `logs/102356-run.log`, table fix in but the old
+  1080 x 2400 geometry, so K26 was still broken there): the black was gone, the keyboard still ran off the edge — so the
+  Control Center black was this table, and not the display size. An incomplete texture samples as opaque, which a
+  mask/text shader turns into its own colour and a vibrant/blur layer into black.
 - *(the observations that led there, kept for the record)* **Whole runs of text come out as solid rectangles in the
   text's own colour** (black labels as black bars, the blue
   "Back" item as a blue bar), while chevrons, icons and the page's background are right. Seen in Settings and in the
@@ -178,15 +184,24 @@ First seen 2026-11-19, the day the 8T's window server started drawing with the A
   opaque everywhere it is used — the mask/glyph texture path, not the refresh and not the GPU (Mesa draws 50 frames a
   second throughout). The first, wrong conclusion ("`glstill=0` fixed it") came from a look at a run that had not yet
   reached the bug.
-- **Visiting Settings → Control Center, and going back, leaves large black areas** in Settings. This is with
-  `glstill=0` too, so it is a second defect, in the vibrant/blur path (`vcm`, the refused `sb3`, the `cc_fade`
-  workaround in K15) and not the same one. Not diagnosed yet.
-- Not yet compared with the OnePlus 8 Pro's images: unknown whether both are 8T-only or the project's.
-- Next: trace one label's draws (`gltrace_place` over a bar + `gltrace_look`, `gltrace_uniforms`, and
-  `gltrace_shaders` for the shader that reads the glyphs' texture) and compare the mask texture's upload with what
-  `userland/src/eagl.c` does for A8/R8 surfaces (the log's `surface NN ('A008' …) copied, not shared`); a black bar
-  on a page that has never scrolled and a bar that appears during a transition should be compared too. Then the Control
-  Centre frame. Work: T50 (8T).
+- *(the second symptom as it was seen)* **Visiting Settings → Control Center, and going back, left large black areas**
+  in Settings, with `glstill=0` too — the black of a layer whose texture had no storage. Not compared with the 8 Pro.
+- **Not the cause** (each tested on the phone): `glcopy=1`, `glstill=0`, the display size (1080 x 2400 and
+  `1125 x 2436` both showed the bars), and the GPU (the software rasteriser with the same `eagl.c` showed them too —
+  which is what pointed at our code rather than at freedreno). `xnu/hackios.patch` and `docs/` only.
+
+## K26 Keyboard wider than the screen — OnePlus 8T · Input · **Fixed** (2026-11-19, owner-verified in a RAM run)
+- **Observed:** the home screen's pull-down search shows the keyboard running off the right edge of the display
+  (nothing of it missing on the left). Same family as K43 on the 8 Pro.
+- **Cause:** the display size iOS was told. At the panel's own 1080 x 2400 the screen is **360 x 800 pt, which is no
+  iPhone's size**; iOS 16.5's keyboard has layouts for the iPhone sizes (375 x 812 up to 430 x 932 pt) and fell back
+  to a wider one, drawn from the left edge out. Verified by rendering at **1290 x 2796** (430 x 932 pt, the iPhone
+  14/15 Pro Max's, which the 8 Pro uses since K43) and pushing that to the 1080 x 2400 panel with `fb_push=2`: the
+  keyboard is right, and nothing else regressed (56–59 frames a second on the home screen, the same as at 1080 x 2400;
+  the processor's bilinear scale to the panel costs what it already cost there). Separated from K25 by the control run
+  `logs/102356-run.log`: 1080 x 2400 with the image table fixed — black areas gone, keyboard still off the edge.
+- **Fix:** `fbwidth=1290 fbheight=2796` in `xnuloader/loader.c`'s `platform_kebab.default_args` (and in
+  `common/devices/kebab.conf`); nothing flashed.
 
 ## K16 Boot and recovery limits — OnePlus 8 · **Limitation** · S2
 - A reset with the **USB cable in** makes the stock ABL take the port for a wall charger: fastboot never appears on USB and the phone switches off. Unplug, enter the mode, replug. Menu entries wait up to 60 s for the cable to come out.

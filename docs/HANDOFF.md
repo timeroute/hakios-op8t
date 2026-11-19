@@ -4,7 +4,7 @@ Short, actionable, and dated. It does **not** replace [TODO.md](TODO.md) (roadma
 it says where the work stands *today*. **Update this file after every substantial session** (rules in [../AGENTS.md](../AGENTS.md)); keep it under ~150 lines and move
 anything that has aged into the right permanent page.
 
-**Last updated: 2026-11-18** (section 0f, OnePlus 8T: iOS boots to SpringBoard, touch works, the GPU starts); before that 2026-11-17 (sections 0d, 0e: 8 Pro documentation sync; OnePlus 8T port scaffolding); before that 2026-11-13 (section 0c); before that 2026-11-07 (sections 0a, 0b); before that 2026-11-02 (section 0, OnePlus 8 Pro cellular); before that 2026-10-26 ~04:55 MSK by the scheduler session (sections 2, 3, 4, 7 for the scheduler; the rest as the documentation session left it at ~03:30). **Checked state** = what I ran/read on that date; **historical** = taken from earlier session notes and flagged as such.
+**Last updated: 2026-11-19** (section 0f, OnePlus 8T: GPU drawing, K25's text bars and Control Center black fixed, K26's keyboard fixed); before that 2026-11-17 (sections 0d, 0e: 8 Pro documentation sync; OnePlus 8T port scaffolding); before that 2026-11-13 (section 0c); before that 2026-11-07 (sections 0a, 0b); before that 2026-11-02 (section 0, OnePlus 8 Pro cellular); before that 2026-10-26 ~04:55 MSK by the scheduler session (sections 2, 3, 4, 7 for the scheduler; the rest as the documentation session left it at ~03:30). **Checked state** = what I ran/read on that date; **historical** = taken from earlier session notes and flagged as such.
 
 ## 0f. OnePlus 8T (kebab), 2026-11-18 — boots iOS 16.5, touch works, the GPU starts (RAM only)
 
@@ -16,12 +16,28 @@ anything that has aged into the right permanent page.
 - **`tools/mesa/` is not in either repository**: it came from shimoku74/hakios-xnu-kernel (same Mesa 25.0.7, same SHA256, its
   `freedreno-darwin.patch`/`hakios-drm`/`air`), and the local `tools/mesa/hakios-drm/hakios.drm.c` carries the same two-name GPU
   lookup as `inject.c` (`HKGPU`, then `HakiosGPU`) -- **re-apply that one edit** whenever the directory is refreshed from elsewhere.
-- **K25's text bars, fixed the same day:** the image table (`struct image images[256]`, `userland/src/eagl.c`) filled up,
-  `image_new()` refused new surface-backed textures (225 messages in one run), their `-texImageIOSurface:` was dropped
-  and every draw of one sampled a constant -- solid rectangles in the text's colour. Found by `gltrace_at` +
+- **K25 fixed (2026-11-19, owner-verified): text bars *and* the black areas after Control Center.** The image table
+  (`struct image images[256]`, `userland/src/eagl.c`) filled up, `image_new()` refused new surface-backed textures (225
+  messages in one run), their `-texImageIOSurface:` was dropped and every draw of one sampled an *incomplete* texture --
+  opaque, so a mask/text shader painted its own colour and a vibrant/blur layer painted black. Found by `gltrace_at` +
   `gltrace_place` + `gltrace_look` (the bars' draws named textures `0 x 0`). The table is 1024 now, with eviction when
-  full; Settings > General > iPhone Storage, the page that always showed it, is right. **Still open:** Control Center
-  leaves black areas (the vibrant/blur path). `glstill=0`, `glcopy=1` and the render geometry were all red herrings.
+  full (a texture that is gone first, else the one looked at longest ago); Settings > General > iPhone Storage and
+  Settings after Control Center are both right. `glstill=0`, `glcopy=1`, the GPU (the software rasteriser showed the
+  bars too) and the render size were all red herrings.
+- **K26 fixed the same session: the search keyboard ran off the right edge.** iOS was told the panel's own
+  1080 x 2400 = 360 x 800 pt, which is no iPhone's size, so iOS 16.5 had no keyboard layout and drew a wider one from
+  the left edge. `platform_kebab.default_args` (and `kebab.conf`) now say **fbwidth=1290 fbheight=2796** (430 x 932 pt,
+  the 8 Pro's since K43) and `fb_push=2` scales it to the panel; the home screen still draws 56-59 frames a second.
+  **The path is now 200 bytes per row different from the panel's** -- anything that assumes iOS pixels == panel pixels
+  on the 8T is wrong (the `xl screenshot` frames come out scaled by the loader, not cropped).
+- **A rebuilt `xnuloader/loader.efi` does not reach a phone that is already in the loader**: `xl enter` returns at once
+  when it finds one (`xl: loader is up`) and `xl run` sends only the kernel and its ramdisk — so a change to the
+  platform's `default_args` is silently not there. Use **`./xl reload`** (it reboots to Android and enters with the new
+  loader). **It goes through Android, so the resident `system.apfs` is gone afterwards** — `./xl ramdisk
+  userland/system.apfs` (~95 s) before the next run, or the kernel panics at `Process 1 exec of /sbin/launchd failed,
+  errno 2` (`logs/103651-run.log`). This cost a run on 2026-11-19, and it was lucky: with the old 1080 x 2400 defaults the window server was
+  clean while the keyboard still ran off the edge, which separated K25 (the image table) from K26 (the display size) in
+  one run (`logs/102356-run.log`). The kernel's `cmdline:` line is where a default that did not arrive shows.
 - Panel note: after a run the panel keeps its last frame, so a loader-idle phone looks like a frozen iOS screen. That is not a hang.
 
 

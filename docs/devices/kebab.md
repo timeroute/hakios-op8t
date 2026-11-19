@@ -26,7 +26,7 @@ Charging is 65 W Warp with no wireless charging: **do not copy the 8 Pro's 95 % 
 | Touch | S6SY761 | S6SY791 | **Synaptics S3908 (TouchComm/TCM) at 0x4b**, `bsd/dev/kebab_tcm.c`; the 8's S6SY761 driver stays gated off (`kebab_touch=1` runs it) |
 | Cameras | IMX586 main | IMX689 + telephoto + AK7377 lens motor | no Pro telephoto; `cam=` off until the sensors are checked |
 | GPU ZAP | `0x8c51a000` | `0x8e21a000` | `0x8c51a000` — the non-Pro branch of `hk_adreno.c` |
-| iOS geometry | 1080x2400 | 1290x2796 (GPU-scaled) | 1080x2400 (`fb_hz=120`; no 8-style 90 Hz DCS write) |
+| iOS geometry | 1080x2400 | 1290x2796 (GPU-scaled) | **1290x2796** (430x932 pt, scaled to the 1080x2400 panel with `fb_push=2`; at the panel's own size iOS has no keyboard layout, K26) |
 | Loader platform | `instantnoodle` | `instantnoodlep` | `kebab`; same fb as the 8, so `mkpayload.py --platform` disambiguates |
 
 Source work (uncommitted): `common/devices/{kebab.conf,kebab.platform.c}`; `xnuloader/loader.c` (`platform_kebab`, `PLAT_IS_KONA()`, payload `platform=` override), `xnuloader/mkpayload.py --platform`, `common/build.sh` + `xl` send it; `board=kebab` joins `instantnoodle_board()` while `instantnoodlep_board()` stays false; the 8's 90 Hz switch is excluded; `uefi/apply.sh` copies a starting DXE set into `uefi/files/Binaries/kebab/`; `tools/board-from-dt.py` now forces output for live trees with mismatched phandles.
@@ -81,10 +81,14 @@ or a trip through Android empties RAM and it must be uploaded again).
   **50 frames a second**. (The kernel's GPU service class is `HKGPU` here; `inject.c`, `inject_sb.c`,
   `gl_test.c` and `tools/mesa/hakios-drm` now match either that or upstream's `HakiosGPU` — before
   that they found nothing and the window server silently kept its software renderer.)
-- **GL defects (K25):** text came out as solid bars in its own colour because the image table (`256` textures with
-  IOSurfaces) filled up and new surface-backed textures got no storage at all; fixed 2026-11-19 (1024 slots, eviction
-  when full) -- Settings > General > iPhone Storage, which always showed it, is right. Still open: a visit to Control
-  Center leaves large black areas behind (the vibrant/blur path).
+- **GL defects (K25): fixed 2026-11-19.** Text came out as solid bars in its own colour and a visit to Control Center
+  left large black areas, because the image table (`256` textures with IOSurfaces) filled up and new surface-backed
+  textures got no storage at all -- an incomplete texture samples as opaque. Now 1024 slots with eviction when full.
+  Owner-verified: Settings > General > iPhone Storage draws its text, and Settings after Control Center is clean.
+- **Keyboard (K26): fixed 2026-11-19.** It ran off the right edge of the screen because iOS was told the panel's own
+  1080 x 2400 = 360 x 800 pt, which is no iPhone's size and has no keyboard layout; iOS 16.5 has layouts up to
+  430 x 932 pt (K43). iOS now renders at **1290 x 2796** and `fb_push=2` scales to the panel: the keyboard is right,
+  and the home screen stays at 56-59 frames a second. `gpu=1` plus `GL=1` throughout.
 - **Vendor firmware for the GPU** was pulled read-only from the phone's `/vendor/firmware`
   (`a650_gmu.bin`, `a650_sqe.fw`, `a650_zap.mdt`, `.b00`–`.b02`) with TWRP 3.7.0_11 booted from RAM
   (`fastboot boot`, root over adb; the stock Android denies shell access to `/vendor/firmware` and

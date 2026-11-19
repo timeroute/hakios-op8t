@@ -25,7 +25,7 @@ Order inside each section is by priority. Update an item when you change its sta
 | T47 | 8 Pro: Wi-Fi auto-join, sleep, AirDrop, sensors, charging | Open (see section) | P1 |
 | T48 | Apple ID and App Store sign-in do not work properly | In Progress (anisette OTP works off-phone 2026-11-13; owner's priority) | P0 |
 | T49 | Hardware video encoding: the Snapdragon's Venus (H.264/H.265) for VideoToolbox | Not Started | P1 |
-| T50 | OnePlus 8T (kebab): bring the port up on the phone | In Progress (2026-11-19: iOS 16.5 boots to SpringBoard from RAM, touch works (S3908/TCM), Adreno 650 draws with Mesa/freedreno at 50 fps) | P1 |
+| T50 | OnePlus 8T (kebab): bring the port up on the phone | In Progress (2026-11-19: iOS 16.5 boots to SpringBoard from RAM, touch works (S3908/TCM), Adreno 650 draws with Mesa/freedreno at 50-59 fps, text and keyboard right; peripherals next) | P1 |
 | T06 | Cellular modem, telephony, SMS | In progress (image 44, built and RAM-tested, not flashed: **Settings > Cellular, the status bar's LTE and bars, SIM and operator through CoreTelephony** (stand-in for CommCenter, research/modem-sdx55.md); flashed image 43: LTE registration, SIM PIN, **mobile data on en1 (verified)**, SMS send, SMS receive with iOS notifications (verified: banner, lock screen, Messages list and conversation), bars, RTC date; open: tethering, VoLTE/VoWiFi) | P1 |
 | T07 | OnePlus 8 cameras | Partial (back and front stream, autofocus, flash: owner-tested 2026-10-27; 2026-11-07 fixes built, unverified) | P1 |
 | T08 | Headphones / USB-C audio | Not Started | P1 |
@@ -432,11 +432,12 @@ The Python CLI, native loader/kernel mailbox, event logging, userspace bridge, d
   and `libhakios.gl.dylib` in `root.apfs`; CoreAnimation then draws with the GPU (`hakios-gl … FD650`, 50 frames a second
   against 10–24 in software). The kernel's GPU service class is `HKGPU` here while userland and `hakios-drm` looked for
   `HakiosGPU` only — all of them now take either.
-- **Fixed 2026-11-19 (K25): text as solid bars** -- our image table (256 textures with IOSurfaces) filled up, new
-  surface-backed textures got no storage and sampled a constant. Now 1024 slots with eviction; the page that always
-  showed it (Settings > General > iPhone Storage) is right. **Still open (K25):** visiting Control Center leaves large
-  black areas afterwards -- a second, separate defect in the vibrant/blur path (`vcm`, the refused `sb3`). Next: the
-  same trace over a Control Center frame that has been left (`gltrace_place` + `gltrace_look`).
+- **Fixed 2026-11-19 (K25): text as solid bars, and the black areas after Control Center** -- our image table (256
+  textures with IOSurfaces) filled up, new surface-backed textures got no storage and sampled as opaque; now 1024 slots
+  with eviction. Settings > General > iPhone Storage (the page that always showed the bars) is right, and so is
+  Settings after a visit to Control Center. **Fixed 2026-11-19 (K26): the keyboard running off the right edge** -- iOS
+  was told the panel's own 1080 x 2400 (360 x 800 pt, no iPhone's size); it now renders at 1290 x 2796 (430 x 932 pt,
+  the 8 Pro's since K43), pushed to the panel with `fb_push=2`, and nothing else regressed (56-59 frames a second).
 - **Loader fix that made the runs measurable:** `xnuloader/loader.c`'s `with_defaults()` cached the merged command line for good, so a
   run silently got the platform's `default_args` and none of its own (`rec_secs`, `touch_lat`, `loader_return_after`); the cache is now
   keyed by the line it was made from.

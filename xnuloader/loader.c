@@ -722,7 +722,12 @@ static const struct platform platform_instantnoodlep = {
  * carry Pixelworks Iris properties, as the Pro's does). Its
  * framebuffer base and height are the OnePlus 8's, so the two cannot be told apart by GOP alone:
  * common/build.sh and xl put a "platform=kebab" entry in the payload and efi_main() honours it.
- * Nothing here has been checked on a phone yet (2026-11-17); the default line is the minimal one.
+ * Checked on a phone 2026-11-17 (RAM runs); the default line is the minimal one.
+ *
+ * iOS is rendered at 1290 x 2796 (430 x 932 pt, the iPhone 14/15 Pro Max's) and pushed to the
+ * 1080 x 2400 panel, as the 8 Pro does: at the panel's own 1080 x 2400 (360 x 800 pt, no iPhone's
+ * size) iOS 16.5's keyboard has no layout and draws one wider than the screen, out past the right
+ * edge (verified on the 8T 2026-11-19; the same lesson as K43's "?123" key on the 8 Pro).
  */
 static const struct platform platform_kebab = {
 	.name = "kebab", .io_base = 0x00400000, .io_size = 0x3FC00000,
@@ -733,7 +738,7 @@ static const struct platform platform_kebab = {
 	.store = "darwin", .store_type = BLOCK_DARWIN_TYPE, .store_uniq = BLOCK_DARWIN_UNIQ,
 	.store_first = BLOCK_DARWIN_FIRST, .store_last = BLOCK_DARWIN_LAST,
 	.board_args = "board_thermal_gpuss_0=0xf board_thermal_gpuss_1=0x108",
-	.default_args = "cpus=8 bootcpu=7 cpufreq=1 fb_hz=120 fb_push=2 fbwidth=1080 fbheight=2400",
+	.default_args = "cpus=8 bootcpu=7 cpufreq=1 fb_hz=120 fb_push=2 fbwidth=1290 fbheight=2796",
 };
 
 /*
