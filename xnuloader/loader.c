@@ -717,14 +717,36 @@ static const struct platform platform_instantnoodlep = {
 };
 
 /*
+ * OnePlus 8T (kebab, KB2000): the same SM8250 SoC, GIC, cores and continuous-splash address as the
+ * OnePlus 8 and 8 Pro, but a flat 1080 x 2400 120 Hz Samsung amb655x panel (no QHD mode; its DT does
+ * carry Pixelworks Iris properties, as the Pro's does). Its
+ * framebuffer base and height are the OnePlus 8's, so the two cannot be told apart by GOP alone:
+ * common/build.sh and xl put a "platform=kebab" entry in the payload and efi_main() honours it.
+ * Nothing here has been checked on a phone yet (2026-11-17); the default line is the minimal one.
+ */
+static const struct platform platform_kebab = {
+	.name = "kebab", .io_base = 0x00400000, .io_size = 0x3FC00000,
+	.gic_dist = 0x17A00000, .gic_redist = 0x17A60000, .uart = 0, .log_other_cpu = 1,
+	.cores = 8, .core_shift = 8,
+	.small_cores = 0x0f,
+	.fb_base = 0x9C000000, .fb_height = 2400,
+	.store = "darwin", .store_type = BLOCK_DARWIN_TYPE, .store_uniq = BLOCK_DARWIN_UNIQ,
+	.store_first = BLOCK_DARWIN_FIRST, .store_last = BLOCK_DARWIN_LAST,
+	.board_args = "board_thermal_gpuss_0=0xf board_thermal_gpuss_1=0x108",
+	.default_args = "cpus=8 bootcpu=7 cpufreq=1 fb_hz=120 fb_push=2 fbwidth=1080 fbheight=2400",
+};
+
+/*
  * The devices the loader knows, told apart by the framebuffer base their UEFI reports. A port to another
  * device adds its description here (common/new-device.sh writes a starting point, docs/PORTING.md says
- * where each value comes from); a display that matches none is QEMU's ramfb.
+ * where each value comes from); a display that matches none is QEMU's ramfb. A payload "platform" entry
+ * names one explicitly when two phones share a framebuffer (the 8 and the 8T both 0x9c000000/2400).
  */
 static const struct platform *const platforms[] = {
 	&platform_redwood,
 	&platform_instantnoodle,
 	&platform_instantnoodlep,
+	&platform_kebab,
 };
 
 /* ------------------------------------------------------------------------ */
@@ -737,8 +759,8 @@ static const struct platform *const platforms[] = {
  */
 static void usb_quiesce(void);
 static const struct platform *PLAT;
-/* the SM8250 phones: the OnePlus 8 and 8 Pro share the PM8150 power-on block, the SPMI arbiter and the bootloader menu entries */
-#define PLAT_IS_KONA() (PLAT == &platform_instantnoodle || PLAT == &platform_instantnoodlep)
+/* the SM8250 phones: the OnePlus 8, 8 Pro and 8T share the PM8150 power-on block, the SPMI arbiter and the bootloader menu entries */
+#define PLAT_IS_KONA() (PLAT == &platform_instantnoodle || PLAT == &platform_instantnoodlep || PLAT == &platform_kebab)
 
 /*
  * What the PMIC does when the SoC lets go of PS_HOLD (a PSCI reset or switch-off ends with that): the
@@ -3055,8 +3077,13 @@ parse_number(const char *c, unsigned base)
 }
 
 /*
- * The image's line, then those of the platform's default_args that it does not name. Made once: the boot menu's Android changes it in place (oneshot_cmdline_swap()) and the
- * payload is parsed again after that.
+ * The image's line, then those of the platform's default_args that it does not name. Kept for the
+ * line it was made from: the boot menu's Android changes that line in place (oneshot_cmdline_swap())
+ * and the payload is parsed again after that, and a resident loader parses a new payload for every
+ * run, whose line is not the one it saw before (xl's loader_return_after=, the run's boot arguments).
+ * Kept for good instead, the first parse -- the USB payload that brought the loader up, with no line
+ * at all -- decided every later run's line, so a run got the platform's default_args and nothing it
+ * asked for (rec_secs=, touch_lat= were lost in silence until 2026-11-18).
  */
 static int starts_with(const char *s, const char *prefix);
 
@@ -3064,14 +3091,15 @@ static const char *
 with_defaults(const char *line)
 {
 	static char merged[BOOT_LINE_LENGTH];
+	static char from[BOOT_LINE_LENGTH];      /* the line merged was made from */
 	static int made;
 	uint32_t n = 0;
 
-	if (made) {
-		return merged;
-	}
 	if (PLAT == NULL || PLAT->default_args == NULL) {
 		return line;
+	}
+	if (made && str_eq(line, from)) {
+		return merged;
 	}
 	for (const char *c = line; *c; c++) {
 		if (starts_with(c, "hk_defaults=0") && (c == line || c[-1] == ' ')) {
@@ -3118,6 +3146,11 @@ with_defaults(const char *line)
 		d = *end ? end + 1 : end;
 	}
 	merged[n] = 0;
+	from[0] = 0;
+	for (uint32_t k = 0; line[k] != 0 && k < sizeof(from) - 1; k++) {
+		from[k] = line[k];
+		from[k + 1] = 0;
+	}
 	made = 1;
 	return merged;
 }
@@ -3169,6 +3202,36 @@ parse_payload(struct payload_info *pi, int verbose)
 	}
 	pi->cmdline = with_defaults(pi->cmdline);
 	return 1;
+}
+
+/*
+ * An explicit device name in the payload. The framebuffer alone cannot tell the OnePlus 8T from
+ * the OnePlus 8: both have the continuous splash at 0x9c000000, 1080 x 2400. common/build.sh and
+ * xl put "--platform $DEVICE" in the payload they build for a phone, so that board= (and with it
+ * every hardware driver) is the one built for this device. No helper in here is called before the
+ * platform is known -- in particular not with_defaults(), which caches its result.
+ */
+static const char *
+payload_platform(void)
+{
+	struct payload_header *ph = (struct payload_header *)PAYLOAD_BASE;
+
+	if (ph->magic != PAYLOAD_MAGIC) {
+		return NULL;
+	}
+	const uint8_t *p = (const uint8_t *)(ph + 1), *pend = p + ph->size;
+	while (p + sizeof(struct payload_entry) <= pend) {
+		const struct payload_entry *e = (const struct payload_entry *)p;
+
+		if (e->name[0] == 0) {
+			break;
+		}
+		if (str_eq(e->name, "platform")) {
+			return (const char *)(p + sizeof(*e));
+		}
+		p += sizeof(*e) + ((e->size + 15) & ~15u);
+	}
+	return NULL;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -5009,6 +5072,19 @@ efi_main(efi_handle image, efi_system_table *st)
 		if (PLAT == &platform_qemu_virt)
 			ramfb_phone_screen();
 		print("display %d x %d at %x\n", (uint64_t)SCREEN.width, (uint64_t)SCREEN.height, SCREEN.base);
+	}
+	const char *forced_platform = payload_platform();
+
+	if (forced_platform != NULL) {
+		for (unsigned i = 0; i < sizeof(platforms) / sizeof(platforms[0]); i++) {
+			if (str_eq(platforms[i]->name, forced_platform)) {
+				PLAT = platforms[i];
+				break;
+			}
+		}
+		if (!str_eq(PLAT->name, forced_platform)) {
+			print("platform '%s' in the payload is not known; keeping %s\n", forced_platform, PLAT->name);
+		}
 	}
 	read_last_log();
 	print("platform %s\n", PLAT->name);

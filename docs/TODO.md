@@ -25,6 +25,7 @@ Order inside each section is by priority. Update an item when you change its sta
 | T47 | 8 Pro: Wi-Fi auto-join, sleep, AirDrop, sensors, charging | Open (see section) | P1 |
 | T48 | Apple ID and App Store sign-in do not work properly | In Progress (anisette OTP works off-phone 2026-11-13; owner's priority) | P0 |
 | T49 | Hardware video encoding: the Snapdragon's Venus (H.264/H.265) for VideoToolbox | Not Started | P1 |
+| T50 | OnePlus 8T (kebab): bring the port up on the phone | In Progress (2026-11-19: iOS 16.5 boots to SpringBoard from RAM, touch works (S3908/TCM), Adreno 650 draws with Mesa/freedreno at 50 fps) | P1 |
 | T06 | Cellular modem, telephony, SMS | In progress (image 44, built and RAM-tested, not flashed: **Settings > Cellular, the status bar's LTE and bars, SIM and operator through CoreTelephony** (stand-in for CommCenter, research/modem-sdx55.md); flashed image 43: LTE registration, SIM PIN, **mobile data on en1 (verified)**, SMS send, SMS receive with iOS notifications (verified: banner, lock screen, Messages list and conversation), bars, RTC date; open: tethering, VoLTE/VoWiFi) | P1 |
 | T07 | OnePlus 8 cameras | Partial (back and front stream, autofocus, flash: owner-tested 2026-10-27; 2026-11-07 fixes built, unverified) | P1 |
 | T08 | Headphones / USB-C audio | Not Started | P1 |
@@ -417,6 +418,34 @@ The Python CLI, native loader/kernel mailbox, event logging, userspace bridge, d
 - **State (2026-10-28):** `inject_ui.c` moves the clock clear of and level with the hole and the icons nearer the screen's edge (DynamicSplit hooks, `HK_SB_CUTOUT_RIGHT`, `HK_SB_CLOCK_UP`), `inject_sb.c` hides the lock screen's Control Center coaching grabber (the cyan bar under the battery; cause inferred). Image `userland/root-sb2.apfs` (small image + the two libraries; sb1 only had the FixedSplit hooks and changed nothing; boot image `out/instantnoodlep-standalone12-sb2.img` = kernel ufs25 + loader-8pro-quiet, booted with `fastboot boot`, NOT flashed). Details: `docs/subsystems/userland.md`.
 - **Check on the phone:** boot log lines `libhackios-ui: status bar geometry ON ...`, `leadingCenteringEdgeInset a -> b`, `lock screen Control Center coaching: hidden ok, made hidden ok`; home screen: clock fully visible, vertically on the hole's centre; battery near the right edge; lock screen: no bar. Tune: `HK_SB_CUTOUT_RIGHT`, `HK_SB_CLOCK_UP` (points).
 - **Open:** applications without `libhackios-ui` (Camera, Photos, App Store...) still draw the clock under the hole (the library is injected in the INJECT list's programs only; Camera crashed with it: build.sh note); a lone battery stays mid-ear (UIKit centres the items; the group's right edge is right with Wi-Fi + cellular); the sa1 image's `ext/HKMetal.bundle` and `hal/HKAudio.driver` symlinks point at nonsense paths (earlier repacks with 7z prefixed their targets; kept as they were in root-sb1).
+
+### T50 OnePlus 8T (kebab) — Hardware / New device · In Progress (iOS boots, touch works, GPU starts) · P1
+- **2026-11-17:** the connected phone is a KB2000 (OnePlus 8T, HydrogenOS 11, slot a, **bootloader unlocked**, adb `b683318f`). Source work is in place: `common/devices/kebab.conf`, `platform_kebab` + payload `platform=` override (`xnuloader/loader.c`, `xl`, `common/build.sh`), `board=kebab` joining `instantnoodle_board()` (touch deliberately off unless `kebab_touch=1`), a kebab UEFI binary directory and [devices/kebab.md](devices/kebab.md). **Nothing has been built or booted on the phone.**
+- **2026-11-17 audit (done):** owner approved a RAM-only TWRP boot (`fastboot boot`, nothing written); pulled this phone's live DTB, `/proc`, `getprop` and ABL log to `../op8t-data/`. Its panel is Samsung amb655x 1080x2400 at 120 Hz (Iris properties present), touch S6SY761/SY771 with the 8's pins, GPU ZAP `0x8c51a000`, gauge bq27541, and every `board_<block>=` address matches the kernel defaults. Touch is therefore on by default; `fb_hz=120` only paces iOS (no 8-style 90 Hz DCS write). Details in [devices/kebab.md](devices/kebab.md).
+- **2026-11-17 build/first boot (done):** kernel 16 MB, loader 104 KB, kebab UEFI 3 MB, `out/kebab-boot.img` 1.9 MB all built here. First RAM boot: loader `platform kebab`, 1080x2400 at 0x9c000000, USB up; kernel 7 cores, GIC, hk_hfs, `MiniIOMobileFramebuffer: display 1080x2400 on a panel of 1080x2400 (4320 bytes/row)`, then the expected `Failed to mount root device` panic because the run had `XL_RAMDISK=none`. Phone returned to Android. Build recipe and host fixes in [devices/kebab.md](devices/kebab.md).
+- **2026-11-18, verified on the phone (RAM only):** iOS 16.5 reaches SpringBoard and keeps painting; **touch works** through the new
+  `bsd/dev/kebab_tcm.c` for the chip that actually answers, a **Synaptics S3908** (TouchComm/TCM) at I2C `0x4b` on TLMM 38/39 — not the
+  S6SY761 the live device tree names (that driver is off unless `kebab_touch=1`). 1320 reports (9 down / 1303 move / 8 up) in one run,
+  `tl: p`→`tl: i` 50–70 µs, and the owner watched Settings and Clock open from taps. The **Adreno 650** starts too (`adreno=3/9/12/17/21`,
+  then `gpu=1`: `THE GPU STAYS ON for the system to draw with: the service HKGPU`), with firmware pulled read-only from this phone's
+  `/vendor/firmware` into `fw-gpu/` and packed into `root.apfs` as `fw/`. `kebab.conf` carries `gpu=1`. **2026-11-19:** `GL=1` (Mesa 25.0.7 + freedreno, `tools/mesa/`) puts `libOSMesa.8.dylib`
+  and `libhakios.gl.dylib` in `root.apfs`; CoreAnimation then draws with the GPU (`hakios-gl … FD650`, 50 frames a second
+  against 10–24 in software). The kernel's GPU service class is `HKGPU` here while userland and `hakios-drm` looked for
+  `HakiosGPU` only — all of them now take either.
+- **Open after the first GL day (K25):** Settings' text comes out as solid bars in the text's own colour (black labels
+  black, the blue Back item blue), and visiting Control Center leaves large black areas afterwards. Neither `glcopy=1`
+  nor summing every surface every frame (`glstill=0`, and a build with that as the default) changes it, so it is the
+  glyph/mask texture path, not the surface refresh; the Control Center black is a second defect. Next: `gltrace_place`
+  over one bar with `gltrace_look`/`gltrace_uniforms`/`gltrace_shaders`, and the A8 (`'A008'`) surface upload.
+- **Loader fix that made the runs measurable:** `xnuloader/loader.c`'s `with_defaults()` cached the merged command line for good, so a
+  run silently got the platform's `default_args` and none of its own (`rec_secs`, `touch_lat`, `loader_return_after`); the cache is now
+  keyed by the line it was made from.
+- **Still blocked on:** this phone's own `xbl` DXEs (the OnePlus 8 set is a placeholder), and the peripherals one at a time (audio,
+  haptics, torch, Wi-Fi, camera, modem).
+- **Next:** the peripherals one at a time, each after a run that shows it is right: audio, haptics, torch, Wi-Fi, camera, modem. The 8T's
+  65 W Warp charging and lack of wireless charging mean the 8 Pro's charging limits must not be copied. No flash without fresh per-write
+  approval.
+
 
 ## Complete — do not reopen (older documents made these look unfinished)
 - Speakers on the OnePlus 8 (heard by the owner 2026-10-24); the alert slider; the main microphone (owner's claps); App Library grey pods (fixed 2026-10-25); iOS shadows "too large" (owner: resolved);

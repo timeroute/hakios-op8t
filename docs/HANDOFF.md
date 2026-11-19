@@ -4,7 +4,17 @@ Short, actionable, and dated. It does **not** replace [TODO.md](TODO.md) (roadma
 it says where the work stands *today*. **Update this file after every substantial session** (rules in [../AGENTS.md](../AGENTS.md)); keep it under ~150 lines and move
 anything that has aged into the right permanent page.
 
-**Last updated: 2026-11-17** (section 0d); before that 2026-11-13** (section 0c); before that 2026-11-07** (sections 0a, 0b); before that 2026-11-02 (section 0, OnePlus 8 Pro cellular); before that 2026-10-26 ~04:55 MSK by the scheduler session (sections 2, 3, 4, 7 for the scheduler; the rest as the documentation session left it at ~03:30). **Checked state** = what I ran/read on that date; **historical** = taken from earlier session notes and flagged as such.
+**Last updated: 2026-11-18** (section 0f, OnePlus 8T: iOS boots to SpringBoard, touch works, the GPU starts); before that 2026-11-17 (sections 0d, 0e: 8 Pro documentation sync; OnePlus 8T port scaffolding); before that 2026-11-13 (section 0c); before that 2026-11-07 (sections 0a, 0b); before that 2026-11-02 (section 0, OnePlus 8 Pro cellular); before that 2026-10-26 ~04:55 MSK by the scheduler session (sections 2, 3, 4, 7 for the scheduler; the rest as the documentation session left it at ~03:30). **Checked state** = what I ran/read on that date; **historical** = taken from earlier session notes and flagged as such.
+
+## 0f. OnePlus 8T (kebab), 2026-11-18 — boots iOS 16.5, touch works, the GPU starts (RAM only)
+
+- **iOS boots to SpringBoard** from RAM (`./xl enter`, `XL_RAMDISK=userland/root.apfs`, resident `userland/system.apfs` uploaded with `./xl ramdisk`, ~95 s). A `fastboot boot` or a trip through Android empties RAM: re-upload the resident image before the next run.
+- **Touch works and the screen shows it.** New driver `xnu/files/bsd/dev/kebab_tcm.c` for the chip that actually answers, a **Synaptics S3908** (TouchComm/TCM) at I2C `0x4b`, reset/IRQ TLMM 38/39 — *not* the S6SY761 the live device tree names (that driver is now off unless `kebab_touch=1`). `logs/215439-run.log`: `1320 reports: 9 down, 1303 move, 8 up; 0 unreadable, 0 bad headers, 0 out of sync`, `tl: p` → `tl: i` in 50–70 µs, and `[TouchEvents] … <sceneID:com.apple.mobiletimer> … -> foreground` after the owner tapped Clock (Settings opened the same way). The owner's earlier "touch does nothing" was a run whose boot-args never reached the kernel (next line), not the chip.
+- **Loader bug fixed (`xnuloader/loader.c`, uncommitted):** `with_defaults()` kept the merged command line for good, so the first parse — the USB payload that starts the loader, with no line at all — decided every later run's line and a run silently got the platform's `default_args` only. `rec_secs`, `touch_lat`, `loader_return_after`… were all lost. The cache is now keyed by the line it was made from; the kernel's `cmdline:` line shows the run's arguments again. Any measurement taken before this fix that relied on extra boot-args (screen recording, `touch_lat`) is void.
+- **GPU on this phone: the kernel's whole bring-up works** (steps 1–21), with firmware pulled read-only from its `/vendor/firmware` (`a650_gmu.bin`, `a650_sqe.fw`, `a650_zap.mdt`+`.b00`–`.b02`, in `fw-gpu/`, untracked) into `root.apfs` as `fw/`. `adreno=3/9/12/17/21` pass — `CX is on`, `TRUSTZONE ACCEPTS THE ZAP SHADER'S SIGNATURE FROM THIS KERNEL`, `THE 3D CORE HAS POWER AND ANSWERS`, `THE 3D CORE WRITES OUR MEMORY ON COMMAND` — and `gpu=1` gives `THE GPU STAYS ON for the system to draw with: the service HKGPU` with SpringBoard up. `kebab.conf` now carries `gpu=1`.
+- **GPU acceleration works (2026-11-19):** `tools/mesa/` came from shimoku74's port (Mesa 25.0.7 + our patches, same SHA256), `tools/mk-mesa.sh` built `libOSMesa.8.dylib`, `GL=1` put it and `libhakios.gl.dylib` in `root.apfs`, and with `gpu=1` the window server draws through it: `hakios-gl: 8 of 8 methods of EAGLContext are ours`, `OpenGL ES 3.2 Mesa 25.0.7; FD650`, `frame 8: 52 GL calls, 6 draws … 3374 us`, **50 frames a second** (10–24 with the software renderer). Also fixed: the kernel's service class is `HKGPU` while `inject.c`/`inject_sb.c`/`gl_test.c` and `tools/mesa/hakios-drm` looked for `HakiosGPU` only — all four now take either, without which no amount of Mesa would have loaded.
+- Panel note: after a run the panel keeps its last frame, so a loader-idle phone looks like a frozen iOS screen. That is not a hang.
+
 
 ## 0d. OnePlus 8 Pro, 2026-11-17 (documentation sync)
 
@@ -15,6 +25,14 @@ anything that has aged into the right permanent page.
 - **Propagated to:** [devices/instantnoodlep.md](devices/instantnoodlep.md), [devices/instantnoodle.md](devices/instantnoodle.md),
   [devices/README.md](devices/README.md), [KNOWN_ISSUES.md](KNOWN_ISSUES.md) (K01/K03/K06/K07/K12), [TODO.md](TODO.md) (T06/T14),
   [subsystems/gpu.md](subsystems/gpu.md) (Metal on by default since 2026-11-07).
+
+## 0e. OnePlus 8T (kebab), 2026-11-17 — source scaffolding, nothing built or booted
+
+- The attached phone is a **KB2000 / OnePlus 8T** (HydrogenOS 11 `KB2000_21_201110`, adb `b683318f`, slot `_a`), **unlocked** (`flash.locked=0`, `verifiedbootstate=orange`). Owner approved a **RAM-only audit**: `fastboot boot` of TWRP 3.7.0_11 (SHA-256 matched the published one), no partition written; phone was then returned to Android. From TWRP root we pulled the live `fdt`, `/proc` files, `getprop`, by-name map and ABL log to `../op8t-data/` (outside the repos). **Still nothing built or booted of HackiOS, no flash.**
+- Added (uncommitted): `common/devices/{kebab.conf,kebab.platform.c}`, `xnuloader/loader.c` (`platform_kebab`, `PLAT_IS_KONA()`, payload `platform=` override), `xnuloader/mkpayload.py --platform`, `common/build.sh` + `xl` pass it, board=kebab in `instantnoodle.h`, `instantnoodle_i2c.c`, `MiniIOMobileFramebuffer.cpp` (no 8-style 90 Hz switch), `instantnoodle_touch.c` (off unless `kebab_touch=1`), `hk_{buttons,power,cpufreq}.c`, `uefi/apply.sh` + `uefi/files/Binaries/kebab/README.md`, docs (`devices/kebab.md`, device index, BOOT_ARGS, TODO T50).
+- The phone's own DTB/ABL (evidence in `docs/devices/kebab.md`): Samsung **amb655x** 1080x2400 120 Hz command/DSC panel with Iris properties (so "no Iris" was wrong), **S6SY761/SY771** touch at 0x48 on TLMM 38/39 (the 8's, so touch is on by default), GPU ZAP `0x8c51a000` and gauge bq27541 (the 8's), all `board_<block>=` addresses equal the kernel defaults (BOARD_ARGS empty). fb base/height equal the 8's, hence the explicit payload platform entry. Still unverified: firmware/DXEs, push path, 120 Hz switch, every peripheral after CPU+framebuffer+touch; T50. Next: supervised RAM-only first boot; do not flash.
+- **Built and RAM-booted (same session):** kernel 16 MB (`xnu-build.sh -j8 -k BUILD_DSYM=0`; Ubuntu awk needed a `makesyscalls.sh` fix, now done in `xnu/apply.sh`, plus the +55→+57 hunk-header fix in the patch), loader 104 KB, kebab UEFI FD 3 MB (Mu-Silicium cloned/built; needed system nasm/lld/llvm symlinks), `out/kebab-boot.img` 1.9 MB. First `fastboot boot` (nothing flashed): loader prints `platform kebab`, 1080x2400 at 0x9c000000, USB started; kernel reaches `MiniIOMobileFramebuffer: display 1080x2400 ...` with 7 cores up, then panics only on `Failed to mount root device` because the test used `XL_RAMDISK=none`. Phone returned to Android 11. No flash.
+- Host build recipe and fixes: [devices/kebab.md](devices/kebab.md). The userland repo's upstream `main` is empty (moved into the main HakiOS repo), so building full iOS images needs those scripts brought over; an iOS 16.5 IPSW is in `~/Downloads`. No commit made; do not reset other sessions' work.
 
 ## 0c. OnePlus 8 Pro, 2026-11-13 (RAM images 374-396, kernels `data103`-`data113`; nothing flashed)
 
@@ -54,10 +72,10 @@ anything that has aged into the right permanent page.
 - **GPS (hk_location.m):** QMI LOC TLVs fixed (speed 0x18, vertical accuracy 0x1c; 0x19/0x1d were the speed's uncertainty and the vertical confidence), the test file
   `hk_location_on` removed. Built and in `out/tree/r42/bin`; not yet seen against a fix (the phone was indoors).
 - **Sensors (T47), working on the DSP side (verified, RAM image 174, kernel `data69`):** `hk_slpi.c` + `hk_fastrpc.c` (both in `xnu/hackios.patch`'s
-  `conf/files` hunk), `slpi=1`. SEE reports accel, gyro, light, proximity and the derived sensors; the magnetometer now registers too.
-  Firmware from the modem partition at boot (ADSP too: audio verified that way, `adsp.*` no longer in `out/tree/r42/fw`). Sensor registry/configs under
+  `conf/files` hunk), `slpi=1`. SEE reports accel, gyro, light, proximity and the derived sensors; the magnetometer now registers too. Firmware from the modem
+  partition at boot (ADSP too: audio verified that way, `adsp.*` no longer in `out/tree/r42/fw`). Sensor registry/configs under
   `out/tree/r42/sensors/` (copied from the phone's persist/vendor/odm, untracked `fw-sensors/`). How it works: subsystems/input-peripherals.md
-  "Sensors". Next: feed iOS (HID services), `slpi=1` default. TODO T47.
+  "Sensors". Next: feed iOS (HID services), the magnetometer, `slpi=1` default. TODO T47.
 - **Uncommitted:** all of the above (both repositories). The phone is on RAM images; a reboot gives back image 145.
 
 ## 0. OnePlus 8 Pro, 2026-10-28 (this session; the rest of the file is older)
