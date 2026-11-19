@@ -26,6 +26,9 @@ git checkout -q -b redwood "$TAG"
 [ "$(git rev-parse HEAD)" = "$BASE" ] || { echo "apply.sh: $TAG is $(git rev-parse HEAD), expected $BASE" >&2; false; }
 echo 'BUILD/' >> .git/info/exclude
 git apply --whitespace=nowarn "$HERE/hackios.patch"
+# Ubuntu's awk (mawk) keeps the \( \) escapes in makesyscalls.sh's printf formats; macOS' awk drops them.
+# Without this the generated init_sysent.c is full of stray backslashes and the kernel cannot compile.
+sed -i 's/\\(sy_call_t \*\\)/(sy_call_t *)/g' bsd/kern/makesyscalls.sh
 cp -a "$HERE/files/." .
 "$HERE/hfs-stage.sh" "$DIR"            # Apple's HFS+ for the data volume, fetched like XNU (bsd/hk_hfs)
 echo "apply.sh: $DIR: $TAG + $(grep -c '^diff --git' "$HERE/hackios.patch") changed and $(find "$HERE/files" -type f | wc -l) new files"

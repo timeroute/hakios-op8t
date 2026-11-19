@@ -189,7 +189,7 @@ hk_power_sleep_supported(void)
 
 	if (!decided) {
 		decided = true;
-		/* on the OnePlus 8 only: the 8 Pro ("instantnoodlep") has not been given system sleep by default, because the second sleep of a run hangs or returns to the loader (2026-10-29: the first sleep passes, Wi-Fi does not come back, the modem link is lost); syssleep=1 asks for it */
+		/* on the OnePlus 8 only: the 8 Pro ("instantnoodlep") and the 8T ("kebab") have not been given system sleep by default, because on the Pro the second sleep of a run hangs or returns to the loader (2026-10-29: the first sleep passes, Wi-Fi does not come back, the modem link is lost); syssleep=1 asks for it */
 		sleep_enabled = PE_parse_boot_argn("board", board, sizeof(board)) && strcmp(board, "instantnoodle") == 0;
 		PE_parse_boot_argn("syssleep", &sleep_enabled, sizeof(sleep_enabled));
 		PE_parse_boot_argn("sleep_max", &sleep_max, sizeof(sleep_max));
@@ -252,7 +252,8 @@ cable_in(void)
 	uint8_t usbin = 0;
 	char board[32] = "";
 
-	if (!PE_parse_boot_argn("board", board, sizeof(board)) || (strcmp(board, "instantnoodle") != 0 && strcmp(board, "instantnoodlep") != 0)) {
+	if (!PE_parse_boot_argn("board", board, sizeof(board)) ||
+	    (strcmp(board, "instantnoodle") != 0 && strcmp(board, "instantnoodlep") != 0 && strcmp(board, "kebab") != 0)) {
 		return -1;              /* (the PMIC's arbiter is the OnePlus 8's: nothing at that address in QEMU) */
 	}
 	return hk_spmi_read(PM8150B_USBIN, USBIN_RT_STS, &usbin, 1) == 0 ? (usbin & USBIN_PLUGIN) != 0 : -1;

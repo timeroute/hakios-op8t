@@ -13,8 +13,9 @@
 #define INSTANTNOODLE_TLMM_SOUTH        0x0f500000UL
 #define INSTANTNOODLE_TLMM_NORTH        0x0f900000UL
 
-bool instantnoodle_board(void);         /* boot-arg board=instantnoodle or instantnoodlep (xnuloader passes it) */
+bool instantnoodle_board(void);         /* boot-arg board=instantnoodle, instantnoodlep or kebab (xnuloader passes it) */
 bool instantnoodlep_board(void);        /* board=instantnoodlep only: the OnePlus 8 Pro (QHD panel with an Iris chip, S6SY791 touch) */
+bool kebab_board(void);                 /* board=kebab only: the OnePlus 8T (flat 1080x2400 120 Hz amb655x panel) */
 
 struct instantnoodle_pin {
 	uint64_t tile;                  /* INSTANTNOODLE_TLMM_* */
@@ -46,6 +47,7 @@ struct instantnoodle_i2c {
 };
 int instantnoodle_i2c_write(struct instantnoodle_i2c *bus, uint8_t addr, const uint8_t *bytes, unsigned n);
 int instantnoodle_i2c_read(struct instantnoodle_i2c *bus, uint8_t addr, uint8_t reg, uint8_t *buf, unsigned n);
+int instantnoodle_i2c_recv(struct instantnoodle_i2c *bus, uint8_t addr, uint8_t *buf, unsigned n);   /* no register: the target streams */
 int instantnoodle_i2c_read16(struct instantnoodle_i2c *bus, uint8_t addr, uint16_t reg, uint8_t *buf, unsigned n);   /* a register with a 16-bit address */
 void instantnoodle_i2c_recover(struct instantnoodle_i2c *bus);     /* nine clocks and a stop: a target holding SDA lets go */
 

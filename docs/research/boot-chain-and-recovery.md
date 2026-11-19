@@ -28,6 +28,19 @@ kernel's bootstrap page tables cover 8). The kernel is linked at `0xFFFFFFF00400
 payload area is placed once at `RESIDENT_RD_OFFSET` (0x08000000) in the kernel's memory window and survives any number of
 kernel runs (it is read-only), keeping `RESIDENT_RD_RESERVE` (0x30000000) free.
 
+### The command line: the payload's, then the platform's defaults [observed 2026-11-18]
+
+The loader hands the kernel `debug=0x8` + `board=`/`board_<block>=` + `rd=md0` + the payload's own `cmdline` entry. The
+entry itself is the image's line with the *platform's* `default_args` merged in for every name the line does not mention
+(`loader.c` `with_defaults()`; `hk_defaults=0` keeps only what the image asked for, which is what the device profiles pass).
+Until 2026-11-18 that merge was cached for good: the flag was simply "made". A resident loader parses a **new** payload for
+every run, and the first parse is the USB payload that brought the loader up — which has no line at all — so every later run
+silently got the platform's defaults and nothing it asked for. `rec_secs=`, `touch_lat=`, `loader_return_after=` and the
+`epoch=` passed by `xl` never reached the kernel; the log's `cmdline:` line showed exactly the defaults, which is how it was
+found (the staged payload held 189 bytes, the line printed 156). The cache is now keyed by the line it was made from, so a
+payload that differs is merged anew. **Any measurement that relied on extra boot-args before that date is void**, and the
+`cmdline:` line in the loader's log is the thing to read when a boot-arg appears to do nothing.
+
 ### Memory
 The loader picks the largest free RAM block as XNU's `[physBase, physBase+memSize)` (about 4.2-4.3 GB usable on the phones
 under the 6 GB cap; QEMU gets the same window with `QEMU_RAM_GB=7`), copies the Mach-O segments, builds an Apple-format device

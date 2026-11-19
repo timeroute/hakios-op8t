@@ -79,10 +79,10 @@ index 4b83160780c3..d6bb1edb1aae 100644
  
  #
 diff --git a/bsd/conf/files b/bsd/conf/files
-index 44274016a4cf..be89ffb15144 100644
+index 44274016a4cf..a72becdae6f3 100644
 --- a/bsd/conf/files
 +++ b/bsd/conf/files
-@@ -109,6 +109,55 @@ bsd/dev/munge.c 			optional config_requires_u32_munging
+@@ -109,6 +109,58 @@ bsd/dev/munge.c 			optional config_requires_u32_munging
  bsd/dev/unix_startup.c			standard
  
  bsd/dev/monotonic.c optional monotonic
@@ -91,6 +91,7 @@ index 44274016a4cf..be89ffb15144 100644
 +bsd/dev/hk_goodix.c	standard
 +bsd/dev/hk_buttons.c	standard
 +bsd/dev/instantnoodle_touch.c	standard
++bsd/dev/kebab_tcm.c	standard
 +bsd/dev/instantnoodle_i2c.c	standard
 +bsd/dev/instantnoodle_battery.c	standard
 +bsd/dev/instantnoodle_speaker.c	standard
@@ -140,7 +141,7 @@ index 44274016a4cf..be89ffb15144 100644
  bsd/dev/dev_perfmon.c optional config_perfmon
  
  bsd/libkern/crc32.c			standard
-@@ -155,6 +198,55 @@ bsd/miscfs/devfs/devfs_vfsops.c		optional devfs
+@@ -155,6 +207,55 @@ bsd/miscfs/devfs/devfs_vfsops.c		optional devfs
  bsd/miscfs/mockfs/mockfs_fsnode.c	optional mockfs
  bsd/miscfs/mockfs/mockfs_vfsops.c	optional mockfs
  bsd/miscfs/mockfs/mockfs_vnops.c	optional mockfs
@@ -196,7 +197,7 @@ index 44274016a4cf..be89ffb15144 100644
  
  bsd/miscfs/routefs/routefs_ops.c	optional routefs
  
-@@ -361,6 +453,7 @@ bsd/security/audit/audit_syscalls.c		standard
+@@ -361,6 +462,7 @@ bsd/security/audit/audit_syscalls.c		standard
  bsd/security/audit/audit_worker.c		optional config_audit
  
  bsd/pthread/pthread_shims.c		standard
@@ -204,7 +205,7 @@ index 44274016a4cf..be89ffb15144 100644
  bsd/pthread/pthread_priority.c		standard
  bsd/pthread/pthread_workqueue.c		standard
  
-@@ -383,6 +476,7 @@ bsd/kern/kern_debug.c			standard
+@@ -383,6 +485,7 @@ bsd/kern/kern_debug.c			standard
  bsd/kern/kern_symfile.c			standard
  bsd/kern/kern_descrip.c			standard
  bsd/kern/kern_guarded.c			standard
@@ -212,7 +213,7 @@ index 44274016a4cf..be89ffb15144 100644
  bsd/kern/kern_event.c			standard
  bsd/kern/kern_control.c			optional networking
  bsd/kern/kern_exec.c			standard
-@@ -594,3 +688,5 @@ bsd/skywalk/packet/packet_kern.c		optional skywalk
+@@ -594,3 +697,5 @@ bsd/skywalk/packet/packet_kern.c		optional skywalk
  bsd/skywalk/packet/pbufpool.c			optional skywalk
  bsd/skywalk/packet/pbufpool_kern.c		optional skywalk
  bsd/dev/cpu_copy_in_cksum_gen.c			optional skywalk
@@ -555,7 +556,7 @@ index 95192dd62449..b00da803b5b4 100644
  
  	/*
 diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
-index 1d71c66629fb..3e1737c21b86 100644
+index 1d71c66629fb..ec10f0584340 100644
 --- a/bsd/kern/kern_exec.c
 +++ b/bsd/kern/kern_exec.c
 @@ -1157,6 +1157,9 @@ SYSCTL_PROC(_vm, OID_AUTO, shared_region_control,
@@ -994,6 +995,27 @@ index 88adf2dda936..2b2f528d2273 100644
  	/*
  	 * We first evaluate policies that may deny the granting of
  	 * privilege unilaterally.
+diff --git a/bsd/kern/kern_shutdown.c b/bsd/kern/kern_shutdown.c
+index 20d9d475e0b9..df0f9d2acb30 100644
+--- a/bsd/kern/kern_shutdown.c
++++ b/bsd/kern/kern_shutdown.c
+@@ -167,6 +167,7 @@ panic_kernel(int howto, char *message)
+ 	panic_with_options(0, NULL, opts, "userspace panic: %s", message);
+ }
+ 
++extern void hk_reboot_fast(int howto);
+ extern boolean_t compressor_store_stop_compaction;
+ extern lck_mtx_t vm_swap_data_lock;
+ extern int vm_swapfile_create_thread_running;
+@@ -183,6 +184,8 @@ reboot_kernel(int howto, char *message)
+ 		panic_kernel(howto, message);
+ 	}
+ 
++	hk_reboot_fast(howto);  /* the port: boot-arg hk_fast_halt=1 goes straight back to the loader, the data volume synced (osfmk/arm64/loader_return.c) */
++
+ 	if (!OSCompareAndSwap(0, 1, &system_inshutdown)) {
+ 		if ((howto & RB_QUICK) == RB_QUICK) {
+ 			goto force_reboot;
 diff --git a/bsd/kern/kern_sig.c b/bsd/kern/kern_sig.c
 index ae4a5f33df1e..986b517dfd18 100644
 --- a/bsd/kern/kern_sig.c
@@ -1026,6 +1048,27 @@ index 003cfb074a99..c597065f24f1 100644
  
  	if (sock == NULL) {
  		return EINVAL;
+diff --git a/bsd/kern/makesyscalls.sh b/bsd/kern/makesyscalls.sh
+index 52992d4cd0af..140fed3bcb71 100755
+--- a/bsd/kern/makesyscalls.sh
++++ b/bsd/kern/makesyscalls.sh
+@@ -671,14 +671,14 @@ s/\$//g
+ 		}
+ 
+ 		printf("#if CONFIG_REQUIRES_U32_MUNGING\n") > sysent
+-		printf("\t{ \(sy_call_t *\)(void (*)(void))%s, %s, %s, %s, %s},",
++		printf("\t{ (sy_call_t *)(void (*)(void))%s, %s, %s, %s, %s},",
+ 				tempname, munge32, munge_ret, argssize, size32) > sysent
+ 		linesize = length(tempname) + length(munge32) + \
+ 			length(munge_ret) + length(argssize) + length(size32) + 28
+ 		align_comment(linesize, 88, sysent)
+ 		printf("/* %d = %s%s*/\n", syscall_num, funcname, additional_comments) > sysent
+ 		printf("#else\n") > sysent
+-		printf("\t{ \(sy_call_t *\)(void (*)(void))%s, %s, %s, %s},\n",
++		printf("\t{ (sy_call_t *)(void (*)(void))%s, %s, %s, %s},\n",
+ 				tempname, munge_ret, argssize, size32) > sysent
+ 		printf("#endif\n") > sysent
+ 		
 diff --git a/bsd/kern/sys_generic.c b/bsd/kern/sys_generic.c
 index 4ca22ee4371a..e95e618b4cb6 100644
 --- a/bsd/kern/sys_generic.c
@@ -2518,7 +2561,7 @@ index 94e91306b143..0ec1323086b7 100644
  #endif
  
 diff --git a/osfmk/arm64/machine_routines.c b/osfmk/arm64/machine_routines.c
-index e76e7e7..06c819e 100644
+index e76e7e70ab9c..06c819e0334c 100644
 --- a/osfmk/arm64/machine_routines.c
 +++ b/osfmk/arm64/machine_routines.c
 @@ -734,6 +734,11 @@ ml_get_machine_mem(void)
@@ -4092,6 +4135,19 @@ index c84b2100bc19..d64c08e579f5 100644
  
  #define CORE_NCTRS                     8 /* Placeholder; KPC is not enabled for this target */
  #endif  /* ARM64_BOARD_CONFIG_BCM2837 */
+diff --git a/pexpert/pexpert/arm64/boot.h b/pexpert/pexpert/arm64/boot.h
+index 2c2186ffbca5..fbb002232c08 100644
+--- a/pexpert/pexpert/arm64/boot.h
++++ b/pexpert/pexpert/arm64/boot.h
+@@ -23,7 +23,7 @@
+  * This value matches iBoot's IBOOT_MAX_ENV_VAR_DATA_SIZE.
+  * There are no iBoot headers so have to duplicate it here for now.
+  */
+-#define BOOT_LINE_LENGTH        608
++#define BOOT_LINE_LENGTH        1024
+ 
+ /*
+  * Video information..
 diff --git a/security/mac_vfs_subr.c b/security/mac_vfs_subr.c
 index 97028c06bb92..0daad830d0c0 100644
 --- a/security/mac_vfs_subr.c
@@ -4134,36 +4190,3 @@ index 3ebc295117a3..de101eafc83b 100755
  def find_non_ascii(s):
      for c in s:
          if ord(c) >= 0x80: return True
-diff --git a/bsd/kern/kern_shutdown.c b/bsd/kern/kern_shutdown.c
-index 20d9d47..df0f9d2 100644
---- a/bsd/kern/kern_shutdown.c
-+++ b/bsd/kern/kern_shutdown.c
-@@ -167,6 +167,7 @@ panic_kernel(int howto, char *message)
- 	panic_with_options(0, NULL, opts, "userspace panic: %s", message);
- }
- 
-+extern void hk_reboot_fast(int howto);
- extern boolean_t compressor_store_stop_compaction;
- extern lck_mtx_t vm_swap_data_lock;
- extern int vm_swapfile_create_thread_running;
-@@ -183,6 +184,8 @@ reboot_kernel(int howto, char *message)
- 		panic_kernel(howto, message);
- 	}
- 
-+	hk_reboot_fast(howto);  /* the port: boot-arg hk_fast_halt=1 goes straight back to the loader, the data volume synced (osfmk/arm64/loader_return.c) */
-+
- 	if (!OSCompareAndSwap(0, 1, &system_inshutdown)) {
- 		if ((howto & RB_QUICK) == RB_QUICK) {
- 			goto force_reboot;
-diff --git a/pexpert/pexpert/arm64/boot.h b/pexpert/pexpert/arm64/boot.h
---- a/pexpert/pexpert/arm64/boot.h
-+++ b/pexpert/pexpert/arm64/boot.h
-@@ -23,7 +23,7 @@
-  * This value matches iBoot's IBOOT_MAX_ENV_VAR_DATA_SIZE.
-  * There are no iBoot headers so have to duplicate it here for now.
-  */
--#define BOOT_LINE_LENGTH        608
-+#define BOOT_LINE_LENGTH        1024
- 
- /*
-  * Video information..

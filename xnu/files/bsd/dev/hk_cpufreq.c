@@ -754,8 +754,8 @@ struct cmd_db_bcm {                             /* a BCM's auxiliary data (Linux
 };
 
 /*
- * Is cpufreq on? The boot-arg cpufreq=N says; without it the OnePlus phones (board=instantnoodle*) have it on and
- * every other board off. (The OnePlus 8 Pro's profile had no cpufreq=1: its cores stayed at the loader's clock, with no
+ * Is cpufreq on? The boot-arg cpufreq=N says; without it the OnePlus phones (board=instantnoodle*, kebab) have it on
+ * and every other board off. (The OnePlus 8 Pro's profile had no cpufreq=1: its cores stayed at the loader's clock, with no
  * memory vote and no governor, and the UI dropped frames; cpufreq=0 gives that back for A/B runs.)
  */
 bool hk_cpufreq_enabled(void);
@@ -768,7 +768,8 @@ hk_cpufreq_enabled(void)
 	if (PE_parse_boot_argn("cpufreq", &on, sizeof(on))) {
 		return on != 0;
 	}
-	return PE_parse_boot_argn("board", board, sizeof(board)) && strncmp(board, "instantnoodle", 13) == 0;
+	return PE_parse_boot_argn("board", board, sizeof(board)) &&
+	       (strncmp(board, "instantnoodle", 13) == 0 || strcmp(board, "kebab") == 0);
 }
 
 /* (the same condition as the cores' clocks: the addresses are this phone's) */

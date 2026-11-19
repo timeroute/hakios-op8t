@@ -70,7 +70,9 @@ def pick(rs, want=None, index=0):
 
 
 def main():
-    dts = subprocess.run(['dtc', '-q', '-I', 'dtb', '-O', 'dts', sys.argv[1]], capture_output=True, text=True).stdout
+    # -f: a phone's live tree can have mismatching linux,phandle/phandle pairs (seen on the 8T, 2026-11-17);
+    # without it dtc aborts and the tool silently reports no blocks at all.
+    dts = subprocess.run(['dtc', '-f', '-q', '-I', 'dtb', '-O', 'dts', sys.argv[1]], capture_output=True, text=True).stdout
     board, tsens = {}, []
     # enabled nodes first: a block's address is the same whether a device tree turns its node off or not (the
     # one a UEFI port carries does, for blocks the UEFI does not use), but an enabled node is the better witness

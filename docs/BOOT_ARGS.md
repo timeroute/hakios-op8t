@@ -21,7 +21,8 @@ Rules of thumb: a bare `./xl enter` or a bad arg can hang a phone; **never pass 
 | `cpus=N`, `cpumask=M` | also read by the loader to know the kernel will start more cores (`cpumask` picks cores by position, bit 0 first) |
 | `gamut=p3` | test: leave the iPhone's "P3" display gamut in the device tree (default sRGB, see display.md) |
 | `ufs_probe=1` | loader probes Block I/O 2 behaviour before the kernel starts |
-| `board=NAME` | the loader adds `board=` for the profile's board; `board_<block>=0x...` overrides come from `BOARD_ARGS` (`bsd/sys/hk_board.h`: `epss`, `cmd_db`, `rsc`, `tsens0/1`, `gcc`, `dispcc`, `intf`, `ufshc`, `spmi_*`, `thermal_gpuss_0/1`, `cpu_domains`, `small_cores`) |
+| `board=NAME` | the loader adds `board=` for the profile's board; `board_<block>=0x...` overrides come from `BOARD_ARGS` (`bsd/sys/hk_board.h`: `epss`, `cmd_db`, `rsc`, `tsens0/1`, `gcc`, `dispcc`, `intf`, `ufshc`, `spmi_*`, `thermal_gpuss_0/1`, `cpu_domains`, `small_cores`). Known: `instantnoodle`, `instantnoodlep`, `kebab`. |
+| payload entry `platform=NAME` | not a boot-arg: `mkpayload.py --platform` (`common/build.sh`, `xl`) names the loader's platform directly when two phones share a framebuffer (the OnePlus 8 and 8T both report 0x9c000000 / 1080x2400). It does not replace `board=`. |
 
 ## Kernel
 
@@ -114,11 +115,13 @@ Rules of thumb: a bare `./xl enter` or a bad arg can hang a phone; **never pass 
 
 | Boot-arg | Meaning |
 |---|---|
-| `board` | Device board. `instantnoodle` enables the OnePlus 8 drivers (touch, battery, slider, speakers, Wi-Fi PCIe, ...); the loader passes it. |
+| `board` | Device board. `instantnoodle` enables the OnePlus 8 drivers (touch, battery, slider, speakers, Wi-Fi PCIe, ...); `instantnoodlep` the 8 Pro's and `kebab` the 8T's. The loader passes it. |
 | `buttons` | redwood: 1 power/volume key driver. |
 | `buttons_steps` | Stop key bring-up after N steps. |
 | `buttons_wake` | Power-key wake mode. |
 | `touchscreen` | redwood: 1 starts the Goodix/FocalTech driver. NEVER on the OnePlus 8. 0 turns off the OnePlus driver. |
+| `kebab_touch` | OnePlus 8T: 1 runs the OnePlus 8's S6SY761 driver (it is **off** by default; the live device tree's `sec-s6sy761@48` node is not the chip that answers). |
+| `kebab_tcm` | OnePlus 8T: 0 turns off the Synaptics S3908 driver (`bsd/dev/kebab_tcm.c`, TouchComm/TCM at I2C 0x4b, reset/IRQ TLMM 38/39), which is on for `board=kebab` and is what actually reports touches (2026-11-18). |
 
 ### `bsd/dev/hk_camera.c`
 

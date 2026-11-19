@@ -168,11 +168,12 @@ static struct {
 	uint8_t power_bit, volume_down_bit;             /* in its status; volume_down_bit 0: a pin instead */
 } keys = { 0x09, 0x09, 0x80, 0x40 };
 
-/* The OnePlus 8 and the 8 Pro (instantnoodlep: the same PM8150, power in its power-on block, volume keys GPIO6/GPIO7 per its live device tree's gpio_keys). */
+/* The OnePlus 8, 8 Pro (instantnoodlep) and 8T (kebab): the same PM8150, power in its power-on block,
+ * volume keys GPIO6/GPIO7 per the live device trees' gpio_keys. */
 static bool
 kona_board(const char *board)
 {
-	return strcmp(board, "instantnoodle") == 0 || strcmp(board, "instantnoodlep") == 0;
+	return strcmp(board, "instantnoodle") == 0 || strcmp(board, "instantnoodlep") == 0 || strcmp(board, "kebab") == 0;
 }
 
 static void

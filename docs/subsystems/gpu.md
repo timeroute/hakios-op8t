@@ -9,6 +9,7 @@ Metal. This page separates what is **finished and verified** (OpenGL ES for the 
 |---|---|---|---|
 | redwood | Adreno 642L (A660 family), firmware `a660_*` | `xnu/files/bsd/dev/hk_adreno.c` | OpenGL ES works with `gpu=1`; no per-program page tables, no fence interrupt, no DCVS |
 | instantnoodle | Adreno 650 (`kona` variant, chip id `0x06050002`), firmware `a650_*` | same file, `kona` branches | OpenGL ES works; DCVS, hang recovery, per-program page tables, fence IRQ, clock gating, sleep collapse; Metal in progress |
+| kebab | Adreno 650 (`kona` variant), firmware `a650_*` from this phone's `/vendor/firmware` | same file, `kona` branches, `pro == false` (ZAP region `0x8c51a000`) | Kernel bring-up verified 2026-11-18 (steps 1–21, then `gpu=1`: `THE GPU STAYS ON …: the service HKGPU`); speed bin fuse `0x10` → A650; TrustZone accepts the zap shader. **OpenGL ES verified 2026-11-19** with `GL=1` (`hakios-gl … FD650`, 50 frames a second against 10–24 in software); the service's class here is `HKGPU`, and our userland takes either that or upstream's `HakiosGPU` |
 
 Vendor firmware (`a6xx_gmu`, `sqe`, zap shader) is never in the repository; it is taken from the phone's own
 vendor partition (`fw-gpu/`, see [../BUILD.md](../BUILD.md)).

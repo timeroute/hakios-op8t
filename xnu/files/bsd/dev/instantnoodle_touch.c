@@ -628,6 +628,33 @@ release_all(void)
 	}
 }
 
+/*
+ * (2026-11-17) The 8T's live device tree puts three touch nodes on this bus (i2c@a94000, gpio36 data, gpio37 clock):
+ * sec-s6sy761@48, synaptics-s3908@4B and st_fts@49. Only one chip is mounted, and the phone's own Android says
+ * androidboot.project_name=19805 -- the project-name of the synaptics-s3908@4B node -- and names the panel it runs
+ * (qcom,mdss_dsi_samsung_amb655x_dsc_cmd) in the "panel" list of that node alone. So before the S6SY761's registers
+ * are tried, this says which addresses answer at all, and whether the two lines idle high (a stuck line would make
+ * every address look dead).
+ */
+static void
+kebab_scan(void)
+{
+	char line[200];
+	int at;
+
+	instantnoodle_gpio_input(bus.sda, INSTANTNOODLE_PULL_UP);
+	instantnoodle_gpio_input(bus.scl, INSTANTNOODLE_PULL_UP);
+	sleep_ms(2);
+	at = snprintf(line, sizeof(line), "tl: touch: bus idle sda %d scl %d; answering:",
+	    instantnoodle_gpio_level(bus.sda), instantnoodle_gpio_level(bus.scl));
+	for (unsigned a = 0x08; a <= 0x77 && at < (int)sizeof(line) - 8; a++) {
+		if (instantnoodle_i2c_write(&bus, (uint8_t)a, NULL, 0) == 0) {
+			at += snprintf(line + at, sizeof(line) - at, " %#x", a);
+		}
+	}
+	hk_tl("%s\n", line);
+}
+
 static void
 touch_thread(void *parameter __unused, wait_result_t result __unused)
 {
@@ -646,28 +673,38 @@ touch_thread(void *parameter __unused, wait_result_t result __unused)
 	printf("touch: pins sda %u scl %u reset %u irq %u: cfg %#x %#x %#x %#x\n", bus.sda.pin, bus.scl.pin,
 	    PIN_RESET.pin, PIN_IRQ.pin, instantnoodle_gpio_cfg(bus.sda), instantnoodle_gpio_cfg(bus.scl),
 	    instantnoodle_gpio_cfg(PIN_RESET), instantnoodle_gpio_cfg(PIN_IRQ));
+	/* (2026-11-17) the first lines of this thread are printed before the kernel's console is attached, so a
+	 * run's log showed none of them on the 8T; the "tl:" lines go to the loader's log as they are written. */
+	hk_tl("tl: touch: panel %u x %u, reset %u, irq %u\n", panel_w, panel_h, PIN_RESET.pin, PIN_IRQ.pin);
 
 	instantnoodle_i2c_recover(&bus);                /* both lines let go */
 	instantnoodle_gpio_input(PIN_IRQ, INSTANTNOODLE_PULL_NONE);
 	instantnoodle_gpio_output(PIN_RESET, false, INSTANTNOODLE_PULL_UP, 8);  /* in reset while the supplies come up */
 	if (!instantnoodle_supply_on("ldoc1", 1800) || (sleep_ms(1), !instantnoodle_supply_on("ldoa13", 3008))) {
 		printf("touch: no supplies: no touch screen\n");
+		hk_tl("tl: touch: no supplies (ldoc1 1800, ldoa13 3008), no touch screen\n");
 		goto out;
 	}
+	hk_tl("tl: touch: supplies on (ldoc1 1800, ldoa13 3008)\n");
 	sleep_ms(20);
 	instantnoodle_gpio_output(PIN_RESET, true, INSTANTNOODLE_PULL_UP, 8);
 	sleep_ms(140);                                  /* Linux s6sy761: power-on wait */
 	instantnoodle_i2c_recover(&bus);
 
+	if (kebab_board()) {
+		kebab_scan();
+	}
 	printf("touch: boot-complete event: %s\n", wait_boot_complete() == 0 ? "seen" : "NOT SEEN (going on)");
 	if (ts_read(CMD_DEVICE_ID, id, 3) != 0) {
 		printf("touch: no answer at address %#x: no touch screen\n", TS_ADDR);
+		hk_tl("tl: touch: no answer at address %#x: no touch screen\n", TS_ADDR);
 		goto out;
 	}
 	ts_read(CMD_BOOT_STATUS, &boot, 1);
 	ts_read(CMD_FW_INTEGRITY, &fw, 1);
 	printf("touch: device id %02x %02x %02x, boot status %#x (0x20: application), firmware integrity %#x\n", id[0], id[1],
 	    id[2], boot, fw);
+	hk_tl("tl: touch: device id %02x %02x %02x, boot status %#x\n", id[0], id[1], id[2], boot);
 	/* not acknowledged on this phone, harmless (see the top) */
 	ts_write(func, 3);
 	ts_write(&sense, 1);
@@ -687,6 +724,7 @@ touch_thread(void *parameter __unused, wait_result_t result __unused)
 	} else {
 		printf("touch: polling every 10 ms (touch_irq=0)\n");
 	}
+	hk_tl("tl: touch: reading reports %s\n", use_irq ? "on the interrupt" : "by polling every 10 ms");
 	report_since = mach_absolute_time();
 
 	for (;;) {
@@ -764,6 +802,7 @@ touch_thread(void *parameter __unused, wait_result_t result __unused)
 		absolutetime_to_nanoseconds(done - report_since, &ns);
 		if (ns >= 60 * NSEC_PER_SEC) {
 			printf("touch: %u events, %u bus errors so far\n", events, bus.errors);
+			hk_tl("tl: touch: %u events, %u bus errors so far\n", events, bus.errors);
 			report_since = done;
 		}
 		if (use_irq) {
@@ -787,8 +826,25 @@ instantnoodle_touch_init(void)
 	uint32_t enabled = 1;
 	thread_t thread;
 
+	/* (2026-11-17) what this init sees, before anything else can hide it: a "tl:" line in the loader's log. */
+	hk_tl("tl: touch init: board %d, kebab %d\n", instantnoodle_board(), kebab_board());
 	if (!instantnoodle_board()) {
 		return;
+	}
+	/*
+	 * The 8T is not this chip. Its live device tree carries three touch nodes on the same bus --
+	 * sec-s6sy761@48, synaptics-s3908@4B and st_fts@49 -- because the dtsi is shared by several boards; only
+	 * kebab's own file defines the S3908, the phone's Android says project_name=19805 (the S3908's), and a run
+	 * on the phone (2026-11-18) found 0x4b the only address that answered: "tl: touch: bus idle sda 1 scl 1;
+	 * answering: 0x4b". bsd/dev/kebab_tcm.c drives that chip instead. kebab_touch=1 runs this driver on the 8T
+	 * anyway (its scan is the evidence the 8T is not this chip); kebab_touch=0 is the opt-out.
+	 */
+	if (kebab_board()) {
+		uint32_t kebab_touch = 0;
+
+		if (!PE_parse_boot_argn("kebab_touch", &kebab_touch, sizeof(kebab_touch)) || kebab_touch == 0) {
+			return;
+		}
 	}
 	PE_parse_boot_argn("touchscreen", &enabled, sizeof(enabled));
 	PE_parse_boot_argn("touch_irq", &use_irq, sizeof(use_irq));
@@ -803,5 +859,7 @@ instantnoodle_touch_init(void)
 	 */
 	if (kernel_thread_start_priority(touch_thread, NULL, 92, &thread) == KERN_SUCCESS) {
 		thread_deallocate(thread);
+	} else {
+		hk_tl("tl: touch init: the thread did not start\n");
 	}
 }

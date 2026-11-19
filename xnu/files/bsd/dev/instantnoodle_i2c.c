@@ -59,9 +59,9 @@ instantnoodle_board(void)
 {
 	char board[32] = "";
 
-	/* the OnePlus 8 Pro (instantnoodlep) is the same SoC and mostly the same board: it takes this phone's paths */
+	/* the OnePlus 8 Pro (instantnoodlep) and 8T (kebab) are the same SoC and mostly the same board: they take this phone's paths */
 	return PE_parse_boot_argn("board", board, sizeof(board)) &&
-	       (strcmp(board, "instantnoodle") == 0 || strcmp(board, "instantnoodlep") == 0);
+	       (strcmp(board, "instantnoodle") == 0 || strcmp(board, "instantnoodlep") == 0 || strcmp(board, "kebab") == 0);
 }
 
 bool
@@ -70,6 +70,14 @@ instantnoodlep_board(void)
 	char board[32] = "";
 
 	return PE_parse_boot_argn("board", board, sizeof(board)) && strcmp(board, "instantnoodlep") == 0;
+}
+
+bool
+kebab_board(void)
+{
+	char board[32] = "";
+
+	return PE_parse_boot_argn("board", board, sizeof(board)) && strcmp(board, "kebab") == 0;
 }
 
 /* ---- pins ------------------------------------------------------------------------------------- */
@@ -314,6 +322,37 @@ instantnoodle_i2c_write(struct instantnoodle_i2c *b, uint8_t addr, const uint8_t
 	lck_mtx_unlock(b->lock);
 	if (err) {
 		b->errors++;
+	}
+	return err;
+}
+
+/*
+ * A read with no register: the target streams from wherever its own pointer stands. The Synaptics TCM parts
+ * (the OnePlus 8T's S3908, bsd/dev/kebab_tcm.c) speak that way: a command is a plain write, the answer a plain
+ * read, the chip keeping its place between reads of one message.
+ */
+int
+instantnoodle_i2c_recv(struct instantnoodle_i2c *b, uint8_t addr, uint8_t *buf, unsigned n)
+{
+	int err;
+	uint64_t began = mach_absolute_time(), locked, done;
+
+	bus_lock(b);
+	locked = mach_absolute_time();
+	bb_start(b);
+	err = bb_tx(b, (uint8_t)(addr << 1 | 1));
+	for (unsigned i = 0; i < n && err == 0; i++) {
+		buf[i] = bb_rx(b, i + 1 < n);
+	}
+	bb_stop(b);
+	done = mach_absolute_time();
+	lck_mtx_unlock(b->lock);
+	if (err) {
+		b->errors++;
+	}
+	if (b->trace) {
+		hk_tl("tl: b %s begin %llu locked %llu done %llu bytes %u error %d\n", b->name,
+		    micros(began), micros(locked), micros(done), n, err);
 	}
 	return err;
 }

@@ -33,6 +33,7 @@ Nothing is marked "works" merely because a driver exists: evidence is stated. Fo
 | K20 | Redwood | Not re-verified | Unverified | S3 | | yes |
 | K21 | Installed build | Installed bundle lags the source | Limitation | S3 | yes | |
 | K22 | Agent toolkit | New USB mailbox/control path awaits owner-approved RAM loading | Unverified | S3 | yes | |
+| K25 | UI (8T) | GL text black blocks; Control Center leaves black areas | Bug | S2 | kebab | |
 | K23 | Scheduling | Edge: rare 10-11 ms render frame under heavy DF load; BG starved when UT saturates E; energy model unvalidated | Partial | S4 | yes | untested |
 | K24 | Testing | `sleep` check can fail a correct sleep (continuous clock 0.4 s short once) | Bug (test) | S4 | yes | |
 
@@ -151,6 +152,30 @@ The installed boot keeps `/private/var` on flash (HFS+ on the OnePlus 8). Starti
 - Control Center glyph strokes appear only after the fade settles (`cc_fade` workaround exists, off).
 - Notification banner material has not been compared with a real iOS.
 - The app switcher cannot be opened by script (a test limitation, K19). Work: T22. Evidence: research/ios-userland.md.
+
+## K25 GL rendering on the 8T (kebab) — black text, and black after Control Center · **Bug** · S2
+First seen 2026-11-19, the day the 8T's window server started drawing with the Adreno 650 (`gpu=1` + `GL=1`,
+50 frames a second). RAM runs only; nothing flashed.
+
+- **Whole runs of text come out as solid rectangles in the text's own colour** (black labels as black bars, the blue
+  "Back" item as a blue bar), while chevrons, icons and the page's background are right. Seen in Settings and in the
+  pages under it; coming back to a page sometimes clears it, going through a transition usually brings it back on both
+  pages. Tested and **not** the cause: `glcopy=1` (every IOSurface copied, never shared); `glstill=0` **and** a build
+  whose default is "every surface's memory added up every frame" (`surface_changed()` in `userland/src/eagl.c`) — the
+  bars stay (recording of exactly that build: RAM run `logs/094717-run.log`, frames at 1603.9 s and 1621.1 s; a bar is
+  also visible at 092931 s of the first GL day). A bar being solid in the text's colour says the glyph's coverage is
+  opaque everywhere it is used — the mask/glyph texture path, not the refresh and not the GPU (Mesa draws 50 frames a
+  second throughout). The first, wrong conclusion ("`glstill=0` fixed it") came from a look at a run that had not yet
+  reached the bug.
+- **Visiting Settings → Control Center, and going back, leaves large black areas** in Settings. This is with
+  `glstill=0` too, so it is a second defect, in the vibrant/blur path (`vcm`, the refused `sb3`, the `cc_fade`
+  workaround in K15) and not the same one. Not diagnosed yet.
+- Not yet compared with the OnePlus 8 Pro's images: unknown whether both are 8T-only or the project's.
+- Next: trace one label's draws (`gltrace_place` over a bar + `gltrace_look`, `gltrace_uniforms`, and
+  `gltrace_shaders` for the shader that reads the glyphs' texture) and compare the mask texture's upload with what
+  `userland/src/eagl.c` does for A8/R8 surfaces (the log's `surface NN ('A008' …) copied, not shared`); a black bar
+  on a page that has never scrolled and a bar that appears during a transition should be compared too. Then the Control
+  Centre frame. Work: T50 (8T).
 
 ## K16 Boot and recovery limits — OnePlus 8 · **Limitation** · S2
 - A reset with the **USB cable in** makes the stock ABL take the port for a wall charger: fastboot never appears on USB and the phone switches off. Unplug, enter the mode, replug. Menu entries wait up to 60 s for the cable to come out.

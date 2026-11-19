@@ -230,9 +230,21 @@ void
 hk_input_init(void)
 {
 	int major = cdevsw_add(-1, &touch_cdevsw);
+	/*
+	 * Two names for one queue. This tree's drivers and programs say /dev/hk-touch; the userland built
+	 * from the main HakiOS repository says /dev/hakios-touch (its libhakios opens it in backboardd and
+	 * its rwtouch writes to it). Both names reach the same cdevsw, so neither side has to change.
+	 */
+	static const char *const names[] = { "hk-touch", "hakios-touch" };
 
-	if (major < 0 || devfs_make_node(makedev(major, 0), DEVFS_CHAR, UID_ROOT, GID_WHEEL, 0666, "hk-touch") == NULL) {
+	if (major < 0) {
 		printf("hk-touch: cannot create the device\n");
+	} else {
+		for (unsigned i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
+			if (devfs_make_node(makedev(major, 0), DEVFS_CHAR, UID_ROOT, GID_WHEEL, 0666, names[i]) == NULL) {
+				printf("%s: cannot create the device\n", names[i]);
+			}
+		}
 	}
 	exit_call = thread_call_allocate(exit_hold_elapsed, NULL);
 	hk_board_report();
@@ -240,6 +252,7 @@ hk_input_init(void)
 	hk_virtio_input_init();
 	hk_goodix_init();
 	instantnoodle_touch_init();     /* the OnePlus 8's S6SY761 (board=instantnoodle) */
+	kebab_tcm_init();               /* the OnePlus 8T's Synaptics S3908 (board=kebab) */
 	hk_buttons_init();
 	hk_battery_init();
 	instantnoodle_battery_init();   /* the OnePlus 8's bq27541 (board=instantnoodle) */

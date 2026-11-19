@@ -48,6 +48,7 @@ void hk_input_init(void);
 void hk_virtio_input_init(void);   /* boot-arg virtio_input=1: QEMU's virtio pointer and keyboard */
 void hk_goodix_init(void);         /* boot-arg touchscreen=1: the phone's Goodix or FocalTech touch screen */
 void instantnoodle_touch_init(void);   /* board=instantnoodle: the OnePlus 8's S6SY761 touch screen */
+void kebab_tcm_init(void);             /* board=kebab: the OnePlus 8T's Synaptics S3908 (bsd/dev/kebab_tcm.c) */
 int hk_spmi_read(uint16_t id, uint8_t reg, uint8_t *bytes, uint32_t count); /* id: slave << 8 | peripheral */
 int hk_spmi_write(uint16_t id, uint8_t reg, uint8_t value);  /* through the channel this system owns, read back */
 void hk_buttons_init(void);        /* boot-arg buttons=1: the phone's power and volume keys */

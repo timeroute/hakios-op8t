@@ -293,8 +293,8 @@ instantnoodle(void)
 	char board[32] = "";
 
 	PE_parse_boot_argn("board", board, sizeof(board));
-	/* (the OnePlus 8 Pro, instantnoodlep, has the same display engine; its loader entry passes fb_push=0 fb_hz=60 until the push path is checked on it) */
-	return strcmp(board, "instantnoodle") == 0 || strcmp(board, "instantnoodlep") == 0;
+	/* the OnePlus 8 Pro and the 8T have the same display engine; the 8T goes through the OnePlus 8 panel path below */
+	return strcmp(board, "instantnoodle") == 0 || strcmp(board, "instantnoodlep") == 0 || strcmp(board, "kebab") == 0;
 }
 
 /* The OnePlus 8 Pro only: same engine, another panel (Samsung ANA6706 behind a Pixelworks Iris chip, 1080 x 2376 as ABL leaves it). */
@@ -305,6 +305,16 @@ instantnoodlep(void)
 
 	PE_parse_boot_argn("board", board, sizeof(board));
 	return strcmp(board, "instantnoodlep") == 0;
+}
+
+/* The OnePlus 8T: same engine as the 8, but a flat 1080 x 2400 panel running at 120 Hz (Samsung amb655x; its DT lists Iris properties too). */
+static bool
+kebab(void)
+{
+	char board[32] = "";
+
+	PE_parse_boot_argn("board", board, sizeof(board));
+	return strcmp(board, "kebab") == 0;
 }
 
 /* The MDSS registers (gDPU), once: only on a display the firmware left powered, with its register clock on. */
@@ -2274,7 +2284,9 @@ IOMobileFramebuffer::start(IOService * provider)
 	dscStep();
 	qhdTry();
 	uint32_t hz;
-	if (instantnoodle() && !instantnoodlep() && pushMode() != 0 && !PE_parse_boot_argn("fb_hz", &hz, sizeof(hz))) {
+	/* The OnePlus 8's 90 Hz DCS switch is not the 8T's: its panel runs at 120 Hz, so leave the firmware's
+	 * rate alone until that panel's timing is read from this phone's device tree (docs/devices/kebab.md). */
+	if (instantnoodle() && !instantnoodlep() && !kebab() && pushMode() != 0 && !PE_parse_boot_argn("fb_hz", &hz, sizeof(hz))) {
 		gPanelHz = 90;                  /* (fb_hz=60: the firmware's rate) */
 	}
 	fWidth = gFBWidth ? gFBWidth : fPanelWidth;

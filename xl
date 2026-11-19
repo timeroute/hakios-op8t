@@ -112,7 +112,11 @@ enter() {
 		[ "$(state)" = absent ] && { echo "xl: phone not reachable"; return 1; }
 		enter; return ;;
 	esac
-	xnuloader/mkpayload.py -o usb-payload.bin loader.efi=$L --usb >/dev/null &&
+	# DEVICE is exported by common/lib.sh's load_device; name the platform explicitly when two phones
+	# share a framebuffer (the 8 and the 8T: both 0x9c000000, 1080 x 2400).
+	local platarg=()
+	[ -n "${DEVICE:-}" ] && platarg=(--platform "$DEVICE")
+	xnuloader/mkpayload.py -o usb-payload.bin loader.efi=$L "${platarg[@]}" --usb >/dev/null &&
 		./mkxnuimg.py -p usb-payload.bin -o xnu-usb.img >/dev/null || { echo "xl: image build failed"; return 1; }
 	# Right after the phone enters fastboot the first "boot" is sometimes not taken: try twice.
 	local try
