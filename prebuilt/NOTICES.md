@@ -216,3 +216,16 @@ University of California, Berkeley
 
 - **Apple HFS+** (`hfs-627.100.6`, commit `31d5ec238dfab485e78a9a30b8b92d13e8914f03`, APSL 2.0): fetched by `xnu/hfs-stage.sh` into `bsd/hk_hfs/` and built into the kernel for the OnePlus 8's data volume. Apple's copyright notices are in the fetched files.
 - **libdeflate 1.24** (Eric Biggers, MIT, `xnu/files/bsd/miscfs/apfs/libdeflate/COPYING`) and **libzbitmap** (Corellium LLC, MIT here) are in the APFS driver (see the README "Licenses").
+
+## Not in the prebuilt kernel: vendor firmware
+
+The prebuilt kernel above is built from this repository's sources alone. It contains **no vendor firmware**:
+
+- the Bluetooth ROME patch and NVM (`instantnoodle_btfw.h`) are **not** in it, so `bt=4` says "this build has no
+  firmware header". To get them, build the kernel with `xnu-src/.../bsd/dev/instantnoodle_btfw.h` generated from
+  the phone's own bluetooth partition (`docker/rebuild-bt.sh` does that; the files are the vendor's and are not
+  redistributed here);
+- the Wi-Fi firmware (`amss.bin`, `m3.bin`), the board data (`14wlan.b0c`/`12wlan.b0c`), the audio DSP image
+  (`adsp.*`), the amplifier container (`tfa98xx.cnt`), the GPU firmware and the touch/camera firmware are not in
+  the kernel either: they are read from `fw-*/` in the small image or from the root at run time, taken from the
+  phone the kernel runs on.
