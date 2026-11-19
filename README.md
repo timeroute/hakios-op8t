@@ -1,4 +1,4 @@
-# HackiOS for the OnePlus 8 Pro — XNU kernel
+# HackiOS for the OnePlus 8T — XNU kernel
 
 **HackiOS** boots Apple's open-source **XNU kernel** (`xnu-8796.121.2`, the kernel of iOS 16.5) on Android phone
 hardware and runs the **unmodified iOS 16.5 user space** on top of it: launchd → backboardd → SpringBoard →
@@ -7,12 +7,21 @@ on a compatibility layer make that possible.
 
 It runs on:
 
-- **OnePlus 8 Pro (instantnoodlep, Snapdragon 865)** — the device this repository is about. iOS lives in its own `darwin` partition cut from `userdata`, next to an Android that is kept on the other slot; it boots from a menu at power-on, or is run from a computer without writing anything ([docs/devices/instantnoodlep.md](docs/devices/instantnoodlep.md));
-- **OnePlus 8 (instantnoodle, Snapdragon 865)** — the same SoC, where the OnePlus 8 Pro port started. Its iOS volume lives on its own flash; it boots standalone from a menu, or is run from a computer without writing anything;
+- **OnePlus 8T (kebab, KB2000, Snapdragon 865)** — the device this repository is about, and the port it adds: the
+  same SoC as the OnePlus 8 and 8 Pro, a flat 1080 x 2400 120 Hz panel, a Synaptics S3908 touch controller, the
+  dual TFA9874 speaker amplifiers and a QCA6390 for Wi-Fi and Bluetooth. Everything is run from RAM today (nothing
+  flashed): `. common/lib.sh; load_device kebab; ./xl enter`, then a run with `XL_RAMDISK=userland/root.apfs`
+  ([docs/devices/kebab.md](docs/devices/kebab.md));
+- **OnePlus 8 Pro (instantnoodlep, Snapdragon 865)** — the port the upstream repository (`hackios-op8pro`) is
+  about, and the base this fork was taken from: iOS lives in its own `darwin` partition cut from `userdata`, next to
+  an Android on the other slot; it boots from a menu at power-on, or runs from a computer without writing anything
+  ([docs/devices/instantnoodlep.md](docs/devices/instantnoodlep.md));
+- **OnePlus 8 (instantnoodle, Snapdragon 865)** — the same SoC, where the OnePlus 8 Pro port started. Its iOS
+  volume lives on its own flash; it boots standalone from a menu, or is run from a computer without writing anything;
 - **POCO X5 Pro 5G (redwood, Snapdragon 778G)** — where it began: nothing flashed, started with `fastboot boot`, the system lives in RAM, a reboot returns to Android (dual boot optional);
 - **QEMU** (`virt`, aarch64) — the same thing on any Linux computer, no phone needed.
 
-**Origin.** HackiOS is the work of **OOSEX GANG** ([see Team](#team)). This repository continues their
+**Origin.** HackiOS is the work of **OOSEX GANG** ([see Team](#team)). The upstream repository continues their
 [hackios-xnu-kernel](https://github.com/oosexgang/hackios-xnu-kernel) (through the `iphont-xnu-kernel` fork) and adds the OnePlus 8 Pro port: the Pro's UEFI package and profile,
 its UFS storage driver, display (DSC, 120 Hz), modem, Bluetooth, camera and lens drivers, the volume-up boot menu, and the Docker build scripts. The rest is their work and their
 contributors'; the commit history shows who changed what.
@@ -46,7 +55,8 @@ This repository is half of the project:
 
 | Repository | What |
 |---|---|
-| **hackios-op8pro** (this one) | XNU patches, the EFI loader, the UEFI port, Wi-Fi, QEMU scripts, `xl`, prebuilt kernel/loader/UEFI, `common/` scripts, the OnePlus 8 Pro port, **all documentation** |
+| **hackios-op8t** (this one) | the OnePlus 8T (`kebab`) port — device profile, touch, GPU/Mesa, torch, Wi-Fi, audio, the kernel side of Bluetooth — on top of everything inherited from `hackios-op8pro`: XNU patches, the EFI loader, the UEFI port, QEMU scripts, `xl`, prebuilt kernel/loader/UEFI, `common/` scripts, **all documentation** |
+| [hackios-op8pro](https://github.com/dekefake/hackios-op8pro) (upstream) | the OnePlus 8 Pro port this fork is built on |
 | [hackios-xnu-userland](https://github.com/oosexgang/hackios-xnu-userland) (by OOSEX GANG) | our init, injected libraries, launchd jobs, the APFS image builder, the scripts that take iOS out of Apple's IPSW, Metal/Mesa work |
 
 > **No Apple files are in either repository.** `ios165/fetch.sh` downloads the iOS 16.5 IPSW from Apple's own CDN
@@ -68,7 +78,18 @@ It is a research bench, not a ROM, and flashing it can leave a phone unbootable:
 
 Per-device detail and evidence: [docs/devices/](docs/devices/README.md).
 
-On the **OnePlus 8 Pro** (seen working on the phone; the table with caveats is in [docs/devices/instantnoodlep.md](docs/devices/instantnoodlep.md)): boot to SpringBoard on 8 cores, the display at 120 Hz,
+On the **OnePlus 8T** (seen working on the phone, RAM runs only — nothing flashed; the table with caveats is in
+[docs/devices/kebab.md](docs/devices/kebab.md)): iOS 16.5 boots to SpringBoard on 8 cores; the panel runs at 120 Hz
+through a 1290 x 2796 render scaled to it, so text and the keyboard are right; Synaptics S3908 touch
+(TouchComm/TCM); Adreno 650 drawing through Mesa/freedreno (OpenGL ES, 50-59 fps); flashlight from Control Center;
+Wi-Fi through ath11k on the QCA6390 (scan, join from Settings, DHCP, Safari) and the audio DSP with the phone's own
+two TFA9874 amplifiers (iOS's own sound, microphone). The kernel side of its Bluetooth is up: the controller loads
+this phone's own patch and NVM, `/dev/hk-bt` passes the transport tests and `com.apple.uart.bluetooth` registers.
+**Not yet:** iOS discovery/pairing/Bluetooth audio (the userland side is not built here), the earpiece and
+headphones/USB-C, haptics, camera above the read-only `cam=1` look, the X55 modem, sensors, charging and system
+sleep ([docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md), [docs/TODO.md](docs/TODO.md) T50).
+
+On the **OnePlus 8 Pro** (the upstream port, seen working on the phone; the table with caveats is in [docs/devices/instantnoodlep.md](docs/devices/instantnoodlep.md)): boot to SpringBoard on 8 cores, the display at 120 Hz,
 Adreno 650 drawing through Mesa/freedreno (OpenGL ES), speakers, haptics, flashlight, calls, mobile data in apps, sensors (rotation, compass, barometer), location, Wi-Fi and Bluetooth (pairing, A2DP audio), front, back and telephoto cameras in the Camera app, LTE registration and SMS through the external X55 modem (native IPv6 mobile data over `en1` in kernel), and boot from the phone's flash with a boot menu and persistent `/private/var`. **Not yet:** headphones/USB-C audio, fingerprint, fast charging; system sleep is off by default ([docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md), K45).
 
 In short, on the **OnePlus 8** (seen working on the phone):
@@ -105,6 +126,9 @@ The lock screen appears after 2-3 minutes. Controls and tips: [docs/devices/qemu
 
 ## On a phone
 
+- **OnePlus 8T:** [docs/devices/kebab.md](docs/devices/kebab.md) (this port: the profile `common/devices/kebab.conf`,
+  the firmware to take from the phone, `common/run.sh kebab`, `xl`). Always load the profile before `xl enter`
+  (`. common/lib.sh; load_device kebab`). Runs are RAM only so far: nothing has been flashed.
 - **OnePlus 8 Pro:** [docs/devices/instantnoodlep.md](docs/devices/instantnoodlep.md) (what to extract from your phone, building the UEFI, `docker/`, `tools/macdev/`). Test with `fastboot boot` (nothing is written) before you flash.
 - **OnePlus 8:** [docs/devices/instantnoodle.md](docs/devices/instantnoodle.md) (firmware extraction, `common/run.sh instantnoodle`, `xl`). Always load the profile before `xl enter`.
 - **POCO X5 Pro:** [docs/devices/redwood.md](docs/devices/redwood.md). Needs an unlocked bootloader, `adb`, `fastboot`; nothing is written to the phone's storage in a RAM run.
@@ -113,8 +137,9 @@ The lock screen appears after 2-3 minutes. Controls and tips: [docs/devices/qemu
 
 ## Install as a boot menu / dual boot
 
-HackiOS can boot from the phone's flash: the UEFI with our loader, the kernel and the boot volume in the `darwin` partition (redwood: next to Android, never written; OnePlus 8: standalone in `boot_b`/`userdata`; OnePlus 8 Pro: UEFI in `boot_a`, iOS in a `darwin` partition cut from `userdata`, Android kept on slot B),
-a boot menu at power-on, sessions with no time limit. Two versions are kept, a version that does not come up 3 times is skipped, bundles are SHA-256 checked and, with an owner key pinned, Ed25519-signed.
+HackiOS can boot from the phone's flash: the UEFI with our loader, the kernel and the boot volume in the `darwin` partition (redwood: next to Android, never written; OnePlus 8: standalone in `boot_b`/`userdata`; OnePlus 8 Pro: UEFI in `boot_a`, iOS in a `darwin` partition cut from `userdata`, Android kept on slot B), with a boot menu at power-on and sessions with no time limit. Two versions are kept, a version that does not come up 3 times is skipped, bundles are SHA-256 checked and, with an owner key pinned, Ed25519-signed.
+
+**The OnePlus 8T of this fork is not installed anywhere yet:** every 8T run so far is from RAM (`fastboot boot` of the loader, nothing written to any partition), and an installed image for it is future work ([docs/TODO.md](docs/TODO.md) T50).
 See [docs/INSTALL.md](docs/INSTALL.md). `common/hackios detect|doctor|install|update|switch|health|test` is the front end; `common/hackios test` runs 14 QEMU scenarios of the boot menu and guard.
 
 ## Building from source
@@ -142,7 +167,7 @@ fastboot boot ──► UEFI (Mu-Silicium) ──► xnuloader (EFI application)
               ├─ APFS (images in RAM, iOS volume on flash), ramfs / HFS+ for /private/var
               ├─ minicrypto instead of corecrypto, AMFI and Sandbox stand-ins (MAC policies)
               ├─ driver replacements: IOSurface, IOMobileFramebuffer, AppleKeyStore, backlight, network stack
-              ├─ input: /dev/hk-touch ◄─ touch chip (Goodix / Samsung) or virtio-input (QEMU)
+              ├─ input: /dev/hk-touch ◄─ touch chip (Goodix / Samsung / Synaptics TCM) or virtio-input (QEMU)
               ├─ GPU: Adreno 642L / 650, Wi-Fi: ath11k via a Linux compatibility layer, sound: audio DSP / virtio-sound
               ▼
    iOS 16.5 launchd → logd, notifyd, cfprefsd, runningboardd, backboardd, SpringBoard, apps
@@ -169,7 +194,8 @@ The iOS programs, frameworks and dyld shared cache are not changed by a single b
 | `wifi/lx/` | the layer on which Linux's Wi-Fi driver builds for our kernel |
 | `qemu/` | QEMU runs, touch input, screenshots, stack symbolication |
 | `docker/` | the build containers' Dockerfiles and the kernel, userland, Mesa, UEFI and Bluetooth build scripts that run in them |
-| `INSTANTNOODLEP-PLAN.md` | the OnePlus 8 Pro port's record, addendum by addendum |
+| `INSTANTNOODLEP-PLAN.md` | the OnePlus 8 Pro port's record, addendum by addendum (upstream) |
+| `docs/devices/kebab.md`, `docs/HANDOFF.md` | the OnePlus 8T port's state, run by run |
 | `tools/` | `t` (OnePlus tests), `macdev/` (the Mac build and run scripts), `stubs/` (bring-up stubs), `sahara_dump.py` (reads the phone's RAM after a crash), recording, UFS/flash tools, `mk-ath11k.sh`, host tests (`mhi-test/`, `wpa-test/`, `qmi-test/`, `thermal-test/`, `sleep-test/`, `crypto-test/`) |
 | `prebuilt/` | built kernel, loader and UEFI pieces (`NOTICES.md` lists the third-party code in the kernel) |
 | `userland/`, `ios165/` | the userland repository's files in the same tree (`common/ugit`) |
@@ -217,14 +243,15 @@ Other images in `docs/images/` (health, news, reminders, GPU first frame, ...) a
   qwx(4) (ISC, Stefan Sperling) and Linux describe it; no code of Linux's GPL MHI host is in it.
   `wifi/lx/patches/*.patch` are our changes to FreeBSD headers; the rest of `wifi/lx/` is ours.
 - `uefi/files/Binaries/redwood`, `uefi/files/Binaries/instantnoodle` and `prebuilt/uefi/SILICIUM_UEFI.fd` contain UEFI drivers from the phones'
-  vendor firmware, distributed the way Project Silicium distributes them for other devices. The OnePlus 8 Pro uses the OnePlus 8's set (copied by `uefi/apply.sh`), and its device tree is cut from your own phone: nothing else of the Pro's firmware is here;
+  vendor firmware, distributed the way Project Silicium distributes them for other devices. The OnePlus 8 Pro uses the OnePlus 8's set (copied by `uefi/apply.sh`), and its device tree is cut from your own phone: nothing else of the Pro's firmware is here.
+  **The OnePlus 8T does the same** (its `uefi/files/Binaries/kebab/` holds the OnePlus 8's set for now, and `common/devices/kebab.conf`'s `DTB` is this phone's own live device tree); none of its vendor firmware is here;
   `prebuilt/uefi/mkbootimg.py` — AOSP, Apache-2.0.
 - This repository is licensed under the [Apple Public Source License 2.0](LICENSE): our changes to XNU are a derivative of XNU and must be, and our other code here (loader, scripts) is released under the same license. Third-party code keeps its own license, as listed above.
 
 ## Team
 
 HackiOS is by OOSEX GANG;
-the OnePlus 8 Pro port in this repository is built on their work. OOSEX GANG — [@oodze](https://t.me/oodze) (founder), [@netusd](https://t.me/netusd), [@wannqn](https://t.me/wannqn),
+the upstream OnePlus 8 Pro port, and this OnePlus 8T fork built on it, are their work and dekefake's first. OOSEX GANG — [@oodze](https://t.me/oodze) (founder), [@netusd](https://t.me/netusd), [@wannqn](https://t.me/wannqn),
 [@hxfuxyyXD](https://t.me/hxfuxyyXD). News: [t.me/oosexgangdevs](https://t.me/oosexgangdevs).
 
 The **OnePlus 8T port** in this fork (device profile, touch, GPU/Mesa on that board, torch, Wi-Fi, audio, and the
