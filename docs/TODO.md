@@ -432,11 +432,11 @@ The Python CLI, native loader/kernel mailbox, event logging, userspace bridge, d
   and `libhakios.gl.dylib` in `root.apfs`; CoreAnimation then draws with the GPU (`hakios-gl … FD650`, 50 frames a second
   against 10–24 in software). The kernel's GPU service class is `HKGPU` here while userland and `hakios-drm` looked for
   `HakiosGPU` only — all of them now take either.
-- **Open after the first GL day (K25):** Settings' text comes out as solid bars in the text's own colour (black labels
-  black, the blue Back item blue), and visiting Control Center leaves large black areas afterwards. Neither `glcopy=1`
-  nor summing every surface every frame (`glstill=0`, and a build with that as the default) changes it, so it is the
-  glyph/mask texture path, not the surface refresh; the Control Center black is a second defect. Next: `gltrace_place`
-  over one bar with `gltrace_look`/`gltrace_uniforms`/`gltrace_shaders`, and the A8 (`'A008'`) surface upload.
+- **Fixed 2026-11-19 (K25): text as solid bars** -- our image table (256 textures with IOSurfaces) filled up, new
+  surface-backed textures got no storage and sampled a constant. Now 1024 slots with eviction; the page that always
+  showed it (Settings > General > iPhone Storage) is right. **Still open (K25):** visiting Control Center leaves large
+  black areas afterwards -- a second, separate defect in the vibrant/blur path (`vcm`, the refused `sb3`). Next: the
+  same trace over a Control Center frame that has been left (`gltrace_place` + `gltrace_look`).
 - **Loader fix that made the runs measurable:** `xnuloader/loader.c`'s `with_defaults()` cached the merged command line for good, so a
   run silently got the platform's `default_args` and none of its own (`rec_secs`, `touch_lat`, `loader_return_after`); the cache is now
   keyed by the line it was made from.

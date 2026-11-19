@@ -16,6 +16,12 @@ anything that has aged into the right permanent page.
 - **`tools/mesa/` is not in either repository**: it came from shimoku74/hakios-xnu-kernel (same Mesa 25.0.7, same SHA256, its
   `freedreno-darwin.patch`/`hakios-drm`/`air`), and the local `tools/mesa/hakios-drm/hakios.drm.c` carries the same two-name GPU
   lookup as `inject.c` (`HKGPU`, then `HakiosGPU`) -- **re-apply that one edit** whenever the directory is refreshed from elsewhere.
+- **K25's text bars, fixed the same day:** the image table (`struct image images[256]`, `userland/src/eagl.c`) filled up,
+  `image_new()` refused new surface-backed textures (225 messages in one run), their `-texImageIOSurface:` was dropped
+  and every draw of one sampled a constant -- solid rectangles in the text's colour. Found by `gltrace_at` +
+  `gltrace_place` + `gltrace_look` (the bars' draws named textures `0 x 0`). The table is 1024 now, with eviction when
+  full; Settings > General > iPhone Storage, the page that always showed it, is right. **Still open:** Control Center
+  leaves black areas (the vibrant/blur path). `glstill=0`, `glcopy=1` and the render geometry were all red herrings.
 - Panel note: after a run the panel keeps its last frame, so a loader-idle phone looks like a frozen iOS screen. That is not a hang.
 
 

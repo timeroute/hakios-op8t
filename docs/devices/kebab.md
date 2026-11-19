@@ -81,10 +81,10 @@ or a trip through Android empties RAM and it must be uploaded again).
   **50 frames a second**. (The kernel's GPU service class is `HKGPU` here; `inject.c`, `inject_sb.c`,
   `gl_test.c` and `tools/mesa/hakios-drm` now match either that or upstream's `HakiosGPU` — before
   that they found nothing and the window server silently kept its software renderer.)
-- **Two GL defects are open (K25):** with `GL=1` runs of text are drawn as solid bars in the text's own colour
-  (Settings' labels, the blue Back item), and a visit to Control Center leaves large black areas behind. Neither
-  `glcopy=1` nor summing every surface every frame changes the bars, so it is the glyph/mask texture path; the GPU
-  itself draws 50 frames a second throughout.
+- **GL defects (K25):** text came out as solid bars in its own colour because the image table (`256` textures with
+  IOSurfaces) filled up and new surface-backed textures got no storage at all; fixed 2026-11-19 (1024 slots, eviction
+  when full) -- Settings > General > iPhone Storage, which always showed it, is right. Still open: a visit to Control
+  Center leaves large black areas behind (the vibrant/blur path).
 - **Vendor firmware for the GPU** was pulled read-only from the phone's `/vendor/firmware`
   (`a650_gmu.bin`, `a650_sqe.fw`, `a650_zap.mdt`, `.b00`–`.b02`) with TWRP 3.7.0_11 booted from RAM
   (`fastboot boot`, root over adb; the stock Android denies shell access to `/vendor/firmware` and

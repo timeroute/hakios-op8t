@@ -33,7 +33,7 @@ Nothing is marked "works" merely because a driver exists: evidence is stated. Fo
 | K20 | Redwood | Not re-verified | Unverified | S3 | | yes |
 | K21 | Installed build | Installed bundle lags the source | Limitation | S3 | yes | |
 | K22 | Agent toolkit | New USB mailbox/control path awaits owner-approved RAM loading | Unverified | S3 | yes | |
-| K25 | UI (8T) | GL text black blocks; Control Center leaves black areas | Bug | S2 | kebab | |
+| K25 | UI (8T) | GL: Control Center leaves black areas (text bars fixed) | Bug | S2 | kebab | |
 | K23 | Scheduling | Edge: rare 10-11 ms render frame under heavy DF load; BG starved when UT saturates E; energy model unvalidated | Partial | S4 | yes | untested |
 | K24 | Testing | `sleep` check can fail a correct sleep (continuous clock 0.4 s short once) | Bug (test) | S4 | yes | |
 
@@ -153,11 +153,22 @@ The installed boot keeps `/private/var` on flash (HFS+ on the OnePlus 8). Starti
 - Notification banner material has not been compared with a real iOS.
 - The app switcher cannot be opened by script (a test limitation, K19). Work: T22. Evidence: research/ios-userland.md.
 
-## K25 GL rendering on the 8T (kebab) — black text, and black after Control Center · **Bug** · S2
+## K25 GL rendering on the 8T (kebab) — black after Control Center (the text bars are fixed) · **Bug** · S2
 First seen 2026-11-19, the day the 8T's window server started drawing with the Adreno 650 (`gpu=1` + `GL=1`,
 50 frames a second). RAM runs only; nothing flashed.
 
-- **Whole runs of text come out as solid rectangles in the text's own colour** (black labels as black bars, the blue
+- **FIXED 2026-11-19 (text as solid bars).** The cause was ours, not Mesa's, the kernel's or the GPU's: the
+  per-context image table (`struct image images[256]`, `userland/src/eagl.c`) filled up, `image_new()` refused new
+  surface-backed textures ("more textures with IOSurfaces than there is room for", **225 times in one run**), their
+  `-texImageIOSurface:` was dropped ("not done"), so those textures had no storage at all -- GL reported them as
+  `0 x 0` and every draw of one sampled a constant, which CoreAnimation's "colour x texture" painted as a solid
+  rectangle in the text's own colour. Found by tracing (`gltrace_at` + `gltrace_place` + `gltrace_look`): the draws
+  that painted the bars named textures `(0 x 0, 0x1908)`. The table is now 1024 and, when it is full, a slot is
+  taken from a texture that is gone or from the one looked at longest ago. Verified on the 8T: the page that always
+  showed it (Settings > General > iPhone Storage) has normal glyphs and no such message in the log. The earlier
+  "`glstill=0` fixes it" was a misreading (see below), as were `glcopy=1` and the render geometry.
+- *(the observations that led there, kept for the record)* **Whole runs of text come out as solid rectangles in the
+  text's own colour** (black labels as black bars, the blue
   "Back" item as a blue bar), while chevrons, icons and the page's background are right. Seen in Settings and in the
   pages under it; coming back to a page sometimes clears it, going through a transition usually brings it back on both
   pages. Tested and **not** the cause: `glcopy=1` (every IOSurface copied, never shared); `glstill=0` **and** a build
