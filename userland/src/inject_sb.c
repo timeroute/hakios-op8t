@@ -2077,6 +2077,67 @@ animation_rates(const char *arguments)
 	say("hakios: SpringBoard's animations ask for 80..120 a second (anim_max=1)\n");
 }
 
+/*
+ * dl_120=1: the userland is an iPhone X (iPhone10,3), a 60 Hz phone, so iOS answers 60 from
+ * -[UIScreen maximumFramesPerSecond] and from every -[CADisplayLink maximumFramesPerSecond] and
+ * paces CoreAnimation at 60 whatever the panel does. The 8T's panel is 120 Hz (fb_hz=120) and the
+ * frames cost ~17 ms only because of that cap: with 124 draws a frame the GPU is idle between them
+ * (measured 2026-11-19, docs/subsystems/gpu.md). Off by default; the two answers become the panel's.
+ */
+static long (*original_screen_max_fps)(id, SEL);
+static long (*original_link_max_fps)(id, SEL);
+static long display_max_fps = 60;
+
+static long
+screen_max_fps(id self, SEL selector)
+{
+	long said = original_screen_max_fps != NULL ? original_screen_max_fps(self, selector) : 60;
+
+	return said < display_max_fps ? display_max_fps : said;
+}
+
+static long
+link_max_fps(id self, SEL selector)
+{
+	long said = original_link_max_fps != NULL ? original_link_max_fps(self, selector) : 60;
+
+	return said < display_max_fps ? display_max_fps : said;
+}
+
+static void
+display_link_cap(const char *arguments)
+{
+	Class screen = objc_getClass("UIScreen"), link = objc_getClass("CADisplayLink");
+	Method m;
+	long hz = 120;
+	char args[1024] = "";
+	size_t size = sizeof(args) - 1;
+
+	if (!boot_arg(arguments, "dl_120=1")) {
+		return;
+	}
+	if (sysctlbyname("kern.bootargs", args, &size, NULL, 0) == 0) {
+		const char *at = strstr(args, "fb_hz=");
+
+		if (at != NULL) {
+			long said = strtol(at + 6, NULL, 10);
+
+			if (said == 60 || said == 90 || said == 120) {
+				hz = said;
+			}
+		}
+	}
+	display_max_fps = hz;
+	if ((m = screen != NULL ? class_getInstanceMethod(screen, sel_registerName("maximumFramesPerSecond")) : NULL) != NULL) {
+		original_screen_max_fps = (long (*)(id, SEL))method_setImplementation(m, (IMP)screen_max_fps);
+	}
+	if ((m = link != NULL ? class_getInstanceMethod(link, sel_registerName("maximumFramesPerSecond")) : NULL) != NULL) {
+		original_link_max_fps = (long (*)(id, SEL))method_setImplementation(m, (IMP)link_max_fps);
+	}
+	say("hakios: the display's 60 Hz cap lifted to %ld (dl_120=1): UIScreen %s, CADisplayLink %s\n", hz,
+	    original_screen_max_fps != NULL ? "ok" : "NO", original_link_max_fps != NULL ? "ok" : "NO");
+}
+
 static void
 display_link_rates(void)
 {
@@ -2090,6 +2151,7 @@ display_link_rates(void)
 	}
 	dl_say = boot_arg(arguments, "touch_lat=1");
 	dl_max = !boot_arg(arguments, "dl_max=0");
+	display_link_cap(arguments);
 	animation_rates(arguments);
 	if (!dl_say && !dl_max) {
 		return;

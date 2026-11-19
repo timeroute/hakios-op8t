@@ -1128,14 +1128,40 @@ static const uint8_t kPro120Hz[] = {
 };
 
 /*
+ * OnePlus 8T (kebab): the same kind of switch, this panel's own (the live device tree's
+ * qcom,mdss-dsi-timing-switch-command of "qcom,mdss_dsi_samsung_amb655x_dsc_cmd", timing@0 60 Hz and
+ * timing@1 120 Hz): 0xf0 5a 5a / a5 a5 unlock and lock the vendor page, 0x60 is the refresh-rate
+ * select (0x00: 60 Hz, 0x10: 120 Hz). Both timings are 1080 x 2400 at the same DSI clock, so nothing
+ * else changes. The last packet waits 12 ms at 60 Hz as the device tree has it.
+ */
+static const uint8_t kKebab60Hz[] = {
+	0x39, 0, 3, 0xf0, 0x5a, 0x5a,
+	0x39, 0, 2, 0x60, 0x00,
+	0x39, 12, 3, 0xf0, 0xa5, 0xa5,
+	0,
+};
+static const uint8_t kKebab120Hz[] = {
+	0x39, 0, 3, 0xf0, 0x5a, 0x5a,
+	0x39, 0, 2, 0x60, 0x10,
+	0x39, 0, 3, 0xf0, 0xa5, 0xa5,
+	0,
+};
+
+/*
  * No transfer in flight (pushStart()): the panel to `hz` (60 or 90) if it is not there already, INTF1's TE
  * counter to match (the firmware's setting is for 60).
  */
 static void
 panelRate(unsigned hz)
 {
-	if (instantnoodlep()) {
-		/* k60Hz/k90Hz are the ANA6705's: never to the 8 Pro's ANA6706; its own switch, from its device tree, with fb_dcs=1 */
+	if (instantnoodlep() || kebab()) {
+		/*
+		 * k60Hz/k90Hz are the ANA6705's: never to the 8 Pro's ANA6706 or the 8T's amb655x; each sends its own
+		 * switch, from its device tree, with fb_dcs=1.
+		 */
+		const uint8_t *fast = instantnoodlep() ? kPro120Hz : kKebab120Hz;
+		const uint8_t *slow = instantnoodlep() ? kPro60Hz : kKebab60Hz;
+
 		if ((hz != 60 && hz != 120) || !dsiReady()) {
 			displayLog("display: panelRate(%u) skipped: %s\n", hz, hz != 60 && hz != 120 ? "this panel has 60 and 120 Hz" :
 			    "no panel packets without fb_dcs=1");
@@ -1162,7 +1188,7 @@ panelRate(unsigned hz)
 			return;
 		}
 		*(volatile uint32_t *)(dsi + DSI_CMD_DMA_CTRL) = dma & ~DSI_CMD_DMA_LOW_POWER;     /* "dsi_hs_mode" */
-		for (const uint8_t * c = hz == 120 ? kPro120Hz : kPro60Hz; *c != 0 && dsiPacket(dsi, c[0], c + 3, c[2]); c += 3 + c[2]) {
+		for (const uint8_t * c = hz == 120 ? fast : slow; *c != 0 && dsiPacket(dsi, c[0], c + 3, c[2]); c += 3 + c[2]) {
 			sent++;
 			if (c[1] != 0) {
 				panelWait(c[1]);
@@ -1639,8 +1665,9 @@ pushStart(unsigned height)
 		}
 	}
 	gPushing = true;
-	if (refreshHz() == 90 || refreshHz() == 60 || (refreshHz() == 120 && instantnoodlep())) {
-		panelRate(refreshHz());         /* (120: the OnePlus 8 Pro's panel only; its panelRate() sends that panel's own commands) */
+	if (refreshHz() == 90 || refreshHz() == 60 || (refreshHz() == 120 && (instantnoodlep() || kebab()))) {
+		/* (120: the 8 Pro's and the 8T's panels; panelRate() sends that panel's own commands) */
+		panelRate(refreshHz());
 	}
 	backlightFirstSend();               /* (the brightness iOS set before there was a way to send it, see there) */
 	displayLog("display: autorefresh %#x off after %u us; each frame is pushed through CTL0 on the panel's TE (%s)\n",

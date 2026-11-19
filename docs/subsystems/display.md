@@ -24,6 +24,21 @@ The display is the framebuffer the firmware left (`FB_BASE` in the device profil
 P3, because WebKit otherwise draws into ten-bit surfaces that neither this kernel's surfaces nor the window
 server's renderer handle (`xnuloader/loader.c`, `gamut_p3`).
 
+## OnePlus 8T (kebab): the panel switched to its own 120 Hz timing (2026-11-19, RAM only)
+
+The 8T's amb655x panel has two DCS timings, both 1080 x 2400 at the same DSI clock
+(`qcom,mdss-dsi_timing@0` = 60 Hz, `timing@1` = 120 Hz in its live device tree). Like the 8 Pro's
+ANA6706, its switch is three DCS long writes on page 0xf0: `f0 5a 5a`, `60 10` (0x00 for 60 Hz),
+`f0 a5 a5`; nothing else changes. `MiniIOMobileFramebuffer.cpp` now carries it (`kKebab60Hz`,
+`kKebab120Hz`) and `panelRate()` sends it for `board=kebab` when `fb_hz=120` and `fb_dcs=1`;
+INTF1's TE counter is scaled the same way as the Pro's.
+
+**Measured on the phone (RAM runs, home-screen swipes, `glframes=1`):** before the switch, 60.3
+frames a second (p50 17.0 ms); after it, **96.8** (p50 10.0 ms, p95 14.0 ms, best seconds 102) at
+1290 x 2796, and **99.5** (p50 10.0 ms, best second 112) at 1170 x 2532 — so the panel's timing was
+the 60 Hz cap, and the rest is the frame cost. Hooking `UIScreen`/`CADisplayLink`
+(`inject_sb.c`'s `dl_120=1`) was **not** needed and alone did nothing.
+
 ## Redwood (POCO X5 Pro): DSI video panel, 120 Hz
 
 The panel is sent the framebuffer over and over by the display controller's timing engine at its own rate
